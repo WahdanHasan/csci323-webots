@@ -5,6 +5,6 @@ sceneTreePerspectives: 000000ff0000000100000002000001f4000000fa01000000020100000
 maximizedDockId: -1
 centralWidgetVisible: 1
 orthographicViewHeight: 1
-textFiles: 2 "D:/Program Files/Webots/projects/robots/gctronic/e-puck/controllers/e-puck_avoid_obstacles/e-puck_avoid_obstacles.c" "D:/Program Files/Webots/projects/robots/k-team/khepera1/controllers/khepera_bus/khepera_bus.c" "my_controller.cpp"
+textFiles: 1 "D:/Program Files/Webots/projects/robots/gctronic/e-puck/controllers/e-puck_avoid_obstacles/e-puck_avoid_obstacles.c" "D:/Program Files/Webots/projects/robots/k-team/khepera1/controllers/khepera_bus/khepera_bus.c"
 consoles: Console:All:All
 renderingDevicePerspectives: e-puck:camera;1;1;0;0
