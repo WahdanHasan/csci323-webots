@@ -3,20 +3,36 @@ WorldInfo {
   coordinateSystem "NUE"
 }
 Viewpoint {
-  orientation 0.0006973155711272288 -0.7294227492698478 -0.684062838194424 3.1463999775997427
-  position -0.17228472468203992 7.054963436012391 -0.5655772761525195
+  orientation 0.040175761121042465 0.7055250196378147 0.7075453023541364 2.9678472303482186
+  position -0.0015731258628632616 0.4492155776208693 -0.012005077114040573
 }
 TexturedBackground {
 }
 TexturedBackgroundLight {
 }
-RectangleArena {
+DEF Arena RectangleArena {
   floorSize 3 3
+  floorTileSize 1 1
 }
-Khepera1 {
-  translation 1.359999999998588 -2.0843081250296845e-05 0.11999999997465083
-  rotation -0.2803824807078493 -0.0016968247664112448 0.9598868606756863 2.841464220583956e-07
+DEF Khepera Khepera1 {
+  name "Khepera1"
   controller "my_controller"
+  supervisor TRUE
+  extensionSlot [
+    InertialUnit {
+      translation 0 0.05 0
+      scale 0.1 0.1 0.1
+      children [
+        Shape {
+          appearance PBRAppearance {
+          }
+          geometry Box {
+            size 0.1 0.1 0.1
+          }
+        }
+      ]
+    }
+  ]
 }
 Wall {
   translation -0.61 0 0
