@@ -1,10 +1,15 @@
 #VRML_SIM R2021a utf8
 WorldInfo {
+  basicTimeStep 2
   coordinateSystem "NUE"
+  contactProperties [
+    ContactProperties {
+    }
+  ]
 }
 Viewpoint {
-  orientation 0.2904984510371435 -0.9065207466674647 -0.3063181121097517 4.5384143141846245
-  position 0.8874351788053787 0.7543548618921481 -0.1782890208858631
+  orientation 0.6988245435701098 -0.6656319820997585 -0.2618746297562528 5.230703926565675
+  position 2.554110050869803 3.3906246401352504 2.613682063537019
 }
 TexturedBackground {
 }
@@ -19,6 +24,8 @@ DEF Khepera Khepera1 {
   controller "my_controller"
   supervisor TRUE
   extensionSlot [
+    Accelerometer {
+    }
     InertialUnit {
       translation 0 0.05 0
       scale 0.1 0.1 0.1
@@ -33,6 +40,7 @@ DEF Khepera Khepera1 {
       ]
     }
   ]
+  kinematic TRUE
 }
 E-puck {
   translation -0.4315451506932134 -6.913456051229477e-05 -0.1471337832122933

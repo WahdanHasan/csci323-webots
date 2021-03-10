@@ -12,7 +12,7 @@
 #include <webots/PositionSensor.hpp>
 #include <webots/Receiver.hpp>
 #include <webots/Supervisor.hpp>
-#include <webots/GPS.hpp>
+#include <webots/Accelerometer.hpp>
 #include <webots/InertialUnit.hpp>
 #include <iostream>
 #include <thread>
@@ -90,7 +90,7 @@ const float DISTANCE_BETWEEN_WHEELS = 0.052f;
 
 #pragma region global variables
 Supervisor* robot;
-//Robot* robot;
+Accelerometer* accelerometer;
 Motor* left_motor;
 Motor* right_motor;
 
@@ -126,6 +126,7 @@ int main(int argc, char **argv)
     /* Robot uses supervisor so we can obtain world info as well */
     robot = new Supervisor();
 
+
     /* Gets a reference to the floor/arena */
     Node* n = robot->getFromDef("Arena");
     
@@ -160,18 +161,20 @@ int main(int argc, char **argv)
         q_table.array[i] = new float[q_table.column_count];
 
     /* Createse adjacency matrix */
-    //CreateAdjacenyMatrix(&adjacency_matrix, map_row_size, map_column_size);
+    CreateAdjacenyMatrix(&adjacency_matrix, map_row_size, map_column_size);
 
 #pragma endregion
 
-    Node* rob = robot->getFromDef("Khepera1");
 
-    timeStep = 8;  
+    Node* rob = robot->getFromDef("Khepera2");
+
+    timeStep = robot->getBasicTimeStep();  
 
     /* Get both motors */
     left_motor = robot->getMotor("left wheel motor");
     right_motor = robot->getMotor("right wheel motor");
 
+    /*reseting values*/
     left_motor->setPosition(INFINITY);
     right_motor->setPosition(INFINITY);
     left_motor->setVelocity(10.0);
@@ -179,17 +182,10 @@ int main(int argc, char **argv)
     left_motor->setVelocity(0.0);
     right_motor->setVelocity(0.0);    
 
-    high_resolution_clock::time_point time_at_movement_initiation;
-    high_resolution_clock::time_point time_now;
-    duration<double> time_elapsed;
-
-    bool is_moving = false;
-
-    float start_time = robot->getTime();
-
-
     InertialUnit* imu = robot->getInertialUnit("inertial unit");
+    accelerometer = robot->getAccelerometer("accelerometer");
     imu->enable(timeStep);
+    accelerometer->enable(timeStep);
 
     previous_direction = TopCenter;
 
@@ -204,17 +200,15 @@ int main(int argc, char **argv)
 
     left_motor->setVelocity(10.0);
     right_motor->setVelocity(10.0);
+    double avg_accel = 0.0;
+    int number_of_iter = 0;
 
-    while (robot->step(timeStep) != -1)
+    return 0;
+    while (robot->step(timeStep) != -1) //step(timestep) is a simulation step and doesnt correspon to seconds in real-time.
     {
-        //left_motor->setVelocity(10.0);
-        //right_motor->setVelocity(10.0);
-        //continue;
-
-        std::cout << "Velocity L: " << left_motor->getVelocity() << std::endl;
-        std::cout << "Velocity R: " << right_motor->getVelocity() << std::endl;
+        
         /* Decide where to turn here */
-        turn_to = TopLeft;
+        turn_to = TopCenter;
 
         switch (xyz)
         {
@@ -231,10 +225,10 @@ int main(int argc, char **argv)
             turn_to = MiddleLeft;
             break;
         case 5:
-            turn_to = TopCenter;
+            turn_to = BottomCenter;
             break;
         case 6:
-            turn_to = BottomCenter;
+            turn_to = BottomRight;
             break;
         }
 
@@ -242,9 +236,9 @@ int main(int argc, char **argv)
         {
             robot_forward_angle = RadianToDegree(imu->getRollPitchYaw()[2]);
             turn_direction = GetTurnDirection(robot_forward_angle, turn_to);
-
             if (rotation_first_iteration)
             {
+            std::cout << "Rotating.." << std::endl;
                 opposite_turn_direction = (TurnDirection)(turn_direction * -1);
                 rotation_first_iteration = false;
             }
@@ -307,7 +301,7 @@ void RotateRobot(InertialUnit* imu, DirectionAngle robot_forward_angle_delta, Tu
     {
         left_motor->setVelocity(0.0f);
         right_motor->setVelocity(0.0f);
-
+        std::cout << "Done rotating..." << std::endl;
         previous_direction = robot_forward_angle_delta;
         should_rotate = false;
         return;
@@ -338,6 +332,7 @@ void Move()
     right_motor->setVelocity(MOTOR_DEFAULT_SPEED);
 }
 
+
 void StopMove()
 {
     using namespace std::chrono;
@@ -348,8 +343,7 @@ void StopMove()
         sleep_for = time_to_travel_for_diagonally;
     else
         sleep_for = time_to_travel_for_linearly;
-
-
+    std::cout << "Started moving.. " << std::endl;
     high_resolution_clock::time_point time_at_movement_initiation = high_resolution_clock::now();
     std::this_thread::sleep_for(sleep_for);
     high_resolution_clock::time_point time_now = high_resolution_clock::now();
@@ -492,8 +486,8 @@ void SetUp()
     //distance_to_travel_linear = (SIZE_OF_TILE/NUMBER_OF_DIVISIONS)/2;
     distance_to_travel_linear = 0.5f;
     distance_to_travel_diagonal = sqrt(distance_to_travel_linear * distance_to_travel_linear * 2);
-    time_to_travel_for_linearly = std::chrono::duration<float, std::ratio<1>>(distance_to_travel_linear / MOTOR_DEFAULT_SPEED);
-    time_to_travel_for_diagonally = std::chrono::duration<float, std::ratio<1>>(distance_to_travel_diagonal / MOTOR_DEFAULT_SPEED);
+    time_to_travel_for_linearly = std::chrono::duration<float, std::ratio<1>>((distance_to_travel_linear / 0.1758392f) * 3.0f);
+    time_to_travel_for_diagonally = std::chrono::duration<float, std::ratio<1>>((distance_to_travel_diagonal / 0.1758392f) * 3.0f);
 
     std::cout << "TIME TO MOVE LINEARLY " << distance_to_travel_linear / MOTOR_DEFAULT_SPEED << " FOR " << distance_to_travel_linear << " METERS" << std::endl;
 }
