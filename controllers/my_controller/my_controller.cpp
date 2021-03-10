@@ -1,12 +1,10 @@
 // File:          my_controller.cpp
 // Date:
-// Description:
-// Author:
-// Modifications:
+// Description: Q-learning controller for Khepera1
+// Author: Wahdan Hasan, Rama Al Sbeinaty
+// Modifications: idk what this means lol but we made it
 
-// You may need to add webots include files such as
-// <webots/DistanceSensor.hpp>, <webots/Motor.hpp>, etc.
-// and/or to add some other includes
+#pragma region include statements
 #include <webots/DistanceSensor.hpp>
 #include <webots/Emitter.hpp>
 #include <webots/LightSensor.hpp>
@@ -19,6 +17,8 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#pragma endregion
+
 #define M_PI 3.14159265358979323846
 
 using namespace webots;
@@ -32,6 +32,7 @@ struct Array2D
     int column_count;
 };
 
+#pragma region enums
 /* When rotating Clockwise 
     Right is 0 to -90
     Behind is -90 to -180, then switches to 180
@@ -55,7 +56,7 @@ enum DirectionAngle
     BottomLeft = 135,
     MiddleLeft = 90,
     TopLeft = 45,
-    TopMiddle = 360,
+    TopCenter = 360,
 };
 
 enum TurnDirection
@@ -63,21 +64,29 @@ enum TurnDirection
     Clockwise = 1,
     Anti_Clockwise = -1,
 };
+#pragma endregion
 
+#pragma region function prototypes
 void CreateAdjacenyMatrix(Array2D<float>*, int, int);
-void rotateRobot(InertialUnit*, DirectionAngle, TurnDirection, TurnDirection);
+void RotateRobot(InertialUnit*, DirectionAngle, TurnDirection, TurnDirection);
 TurnDirection GetTurnDirection(float, float);
 float RadianToDegree(double);
+bool CheckIfMovingDiagonally();
 void Move();
 void SetUp();
 void CleanUp();
+void StopMove();
+#pragma endregion
 
+/* Maybe change these to defines instead, more performant */
+#pragma region global constants
 const int NUMBER_OF_TILES_PER_METER = 2;
 const float SIZE_OF_TILE = 0.5f;
-const int NUMBER_OF_DIVISIONS = 2;
+const int NUMBER_OF_DIVISIONS = 1;
 const float MOTOR_DEFAULT_SPEED = 10.0f;
 const float WHEEL_RADIUS = 0.028f;
 const float DISTANCE_BETWEEN_WHEELS = 0.052f;
+#pragma endregion
 
 #pragma region global variables
 Supervisor* robot;
@@ -91,8 +100,8 @@ DirectionAngle previous_direction;
 
 float distance_to_travel_linear;
 float distance_to_travel_diagonal;
-float time_to_travel_for_linearly;
-float time_to_travel_for_diagonally;
+std::chrono::duration<float, std::ratio<1>> time_to_travel_for_linearly;
+std::chrono::duration<float, std::ratio<1>> time_to_travel_for_diagonally;
 
 float linear_velocity;
 float rotation_rate;
@@ -101,6 +110,8 @@ int timeStep;
 bool should_rotate = true;
 bool should_move = true;
 bool rotation_first_iteration;
+bool move_delay_thread_started;
+int xyz = 0;
 #pragma endregion
 
 
@@ -180,19 +191,52 @@ int main(int argc, char **argv)
     InertialUnit* imu = robot->getInertialUnit("inertial unit");
     imu->enable(timeStep);
 
-    previous_direction = TopMiddle;
+    previous_direction = TopCenter;
 
     float robot_forward_angle;
     TurnDirection turn_direction;
     TurnDirection opposite_turn_direction;
     DirectionAngle turn_to;
+
     should_rotate = true;
-    
+    move_delay_thread_started = false;
     rotation_first_iteration = true;
+
+    left_motor->setVelocity(10.0);
+    right_motor->setVelocity(10.0);
+
     while (robot->step(timeStep) != -1)
     {
+        //left_motor->setVelocity(10.0);
+        //right_motor->setVelocity(10.0);
+        //continue;
+
+        std::cout << "Velocity L: " << left_motor->getVelocity() << std::endl;
+        std::cout << "Velocity R: " << right_motor->getVelocity() << std::endl;
         /* Decide where to turn here */
         turn_to = TopLeft;
+
+        switch (xyz)
+        {
+        case 1:
+            turn_to = TopLeft;
+            break;
+        case 2:
+            turn_to = TopRight;
+            break;
+        case 3:
+            turn_to = MiddleRight;
+            break;
+        case 4:
+            turn_to = MiddleLeft;
+            break;
+        case 5:
+            turn_to = TopCenter;
+            break;
+        case 6:
+            turn_to = BottomCenter;
+            break;
+        }
 
         if (should_rotate)
         {
@@ -205,14 +249,25 @@ int main(int argc, char **argv)
                 rotation_first_iteration = false;
             }
 
-            rotateRobot(imu, turn_to, turn_direction, opposite_turn_direction);
+            RotateRobot(imu, turn_to, turn_direction, opposite_turn_direction);
             continue;
         }
 
         /* Should set variable should_rotate to true at the end of the move */
         if (should_move)
         {
+            Move();
 
+            should_move = false;
+            /* Wait for x amount of time before setting should_rotate to true again */
+        }
+        else
+        {
+            if (!move_delay_thread_started)
+            {
+                std::thread(StopMove).detach();
+                move_delay_thread_started = true;
+            }
         }
 
     }
@@ -237,7 +292,7 @@ float RadianToDegree(double radian)
 }
 
 /* Rotates the robot to face the direction provided */
-void rotateRobot(InertialUnit* imu, DirectionAngle robot_forward_angle_delta, TurnDirection turn_direction, TurnDirection opposite_turn_direciton)
+void RotateRobot(InertialUnit* imu, DirectionAngle robot_forward_angle_delta, TurnDirection turn_direction, TurnDirection opposite_turn_direciton)
 {
     /* Returns if the current facing direction is the direction to rotate towards */
     if (previous_direction == robot_forward_angle_delta)
@@ -262,8 +317,8 @@ void rotateRobot(InertialUnit* imu, DirectionAngle robot_forward_angle_delta, Tu
     left_motor->setVelocity(turn_direction * MOTOR_DEFAULT_SPEED);
     right_motor->setVelocity(turn_direction * -MOTOR_DEFAULT_SPEED);
 
-    if (turn_direction == Clockwise) std::cout << "I should turn clockwise: " << std::endl;
-    else std::cout << "I should turn Anti-clockwise: " << std::endl;
+    //if (turn_direction == Clockwise) std::cout << "I should turn clockwise: " << std::endl;
+    //else std::cout << "I should turn Anti-clockwise: " << std::endl;
 }
 
 /* Returns the optimal direction to rotate in to reach the target position */
@@ -279,8 +334,52 @@ TurnDirection GetTurnDirection(float angle_a, float angle_b)
 
 void Move()
 {
+    left_motor->setVelocity(MOTOR_DEFAULT_SPEED);
+    right_motor->setVelocity(MOTOR_DEFAULT_SPEED);
+}
+
+void StopMove()
+{
+    using namespace std::chrono;
+
+    std::chrono::duration<float, std::ratio<1>> sleep_for;
+
+    if (CheckIfMovingDiagonally())
+        sleep_for = time_to_travel_for_diagonally;
+    else
+        sleep_for = time_to_travel_for_linearly;
 
 
+    high_resolution_clock::time_point time_at_movement_initiation = high_resolution_clock::now();
+    std::this_thread::sleep_for(sleep_for);
+    high_resolution_clock::time_point time_now = high_resolution_clock::now();
+
+    left_motor->setVelocity(0.0f);
+    right_motor->setVelocity(0.0f);
+
+    move_delay_thread_started = false;
+    should_move = true;
+    should_rotate = true;
+    rotation_first_iteration = true;
+    xyz++;
+
+    duration<double> time_span = duration_cast<duration<double>>(time_now - time_at_movement_initiation);
+
+    std::cout << "Done Moving.. I was supposed to move for " << time_span.count() << " seconds" << std::endl;
+}
+
+bool CheckIfMovingDiagonally()
+{
+    switch (previous_direction)
+    {
+    case TopLeft:
+    case TopRight:
+    case BottomLeft:
+    case BottomRight:
+        return true;
+    default:
+        return false;
+    }
 }
 
 /* Currently unused; to be removed if it remains so */
@@ -390,10 +489,13 @@ void CreateAdjacenyMatrix(Array2D<float>* table, int map_row_count, int map_colu
 
 void SetUp()
 {
-    distance_to_travel_linear = (SIZE_OF_TILE/NUMBER_OF_DIVISIONS)/2;
+    //distance_to_travel_linear = (SIZE_OF_TILE/NUMBER_OF_DIVISIONS)/2;
+    distance_to_travel_linear = 0.5f;
     distance_to_travel_diagonal = sqrt(distance_to_travel_linear * distance_to_travel_linear * 2);
-    time_to_travel_for_linearly = distance_to_travel_linear / MOTOR_DEFAULT_SPEED;
-    time_to_travel_for_diagonally = distance_to_travel_diagonal / MOTOR_DEFAULT_SPEED;
+    time_to_travel_for_linearly = std::chrono::duration<float, std::ratio<1>>(distance_to_travel_linear / MOTOR_DEFAULT_SPEED);
+    time_to_travel_for_diagonally = std::chrono::duration<float, std::ratio<1>>(distance_to_travel_diagonal / MOTOR_DEFAULT_SPEED);
+
+    std::cout << "TIME TO MOVE LINEARLY " << distance_to_travel_linear / MOTOR_DEFAULT_SPEED << " FOR " << distance_to_travel_linear << " METERS" << std::endl;
 }
 
 void CleanUp()
