@@ -1,13 +1,16 @@
 ﻿  my_controller.cpp
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(134): warning C4244: 'initializing': conversion from 'const double' to 'int', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(135): warning C4244: 'initializing': conversion from 'const double' to 'int', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(171): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(238): warning C4244: 'argument': conversion from 'DirectionAngle' to 'float', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(277): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(167): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(190): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(255): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(275): warning C4244: 'argument': conversion from 'DirectionAngle' to 'float', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(135): warning C4101: 'ds2_distance': unreferenced local variable
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(122): warning C4101: 'ds2': unreferenced local variable
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(222): warning C4101: 'rewards_all_episodes': unreferenced local variable
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(366): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(603): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
   Generating code
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(327): warning C4715: 'GetTurnDirection': not all control paths return a value
-  99 of 719 functions (13.8%) were compiled, the rest were copied from previous compilation.
+  2 of 626 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    5 functions had inline decision re-evaluated but remain unchanged
+    7 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   my_controller.vcxproj -> C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\my_controller.exe

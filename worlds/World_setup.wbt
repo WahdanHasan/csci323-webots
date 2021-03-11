@@ -8,8 +8,8 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation 0.6988245435701098 -0.6656319820997585 -0.2618746297562528 5.230703926565675
-  position 2.554110050869803 3.3906246401352504 2.613682063537019
+  orientation 0.6846849032087068 -0.7078176847123946 -0.17378351051371055 5.555114216743085
+  position 2.5100593764283787 2.7539281340610904 3.4855500204751753
 }
 TexturedBackground {
 }
@@ -24,7 +24,8 @@ DEF Khepera Khepera1 {
   controller "my_controller"
   supervisor TRUE
   extensionSlot [
-    Accelerometer {
+    GPS {
+      scale 0.0455197 0.0455197 0.0455197
     }
     InertialUnit {
       translation 0 0.05 0
@@ -40,9 +41,9 @@ DEF Khepera Khepera1 {
       ]
     }
   ]
-  kinematic TRUE
 }
 E-puck {
   translation -0.4315451506932134 -6.913456051229477e-05 -0.1471337832122933
   rotation 0.00013229661799375725 0.9999998235312941 0.00057916749341601 -1.2174528661823696
+  controller ""
 }

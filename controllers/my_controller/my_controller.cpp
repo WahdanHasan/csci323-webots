@@ -6,23 +6,18 @@
 
 #pragma region include statements
 #include <webots/DistanceSensor.hpp>
-#include <webots/Emitter.hpp>
-#include <webots/LightSensor.hpp>
 #include <webots/Motor.hpp>
 #include <webots/PositionSensor.hpp>
-#include <webots/Receiver.hpp>
 #include <webots/Supervisor.hpp>
-#include <webots/Accelerometer.hpp>
 #include <webots/InertialUnit.hpp>
+#include <webots/GPS.hpp>
 #include <iostream>
-#include <thread>
-#include <chrono>
+#include <time.h>
 #pragma endregion
 
 #define M_PI 3.14159265358979323846
 
 using namespace webots;
-
 
 template<typename t>
 struct Array2D
@@ -32,7 +27,7 @@ struct Array2D
     int column_count;
 };
 
-#pragma region enums
+#pragma region Enums
 /* When rotating Clockwise 
     Right is 0 to -90
     Behind is -90 to -180, then switches to 180
@@ -45,7 +40,6 @@ struct Array2D
     Ive changed this so that clockwise rotation
     is represented from 360 to 0 degrees.
 */
-
 
 enum DirectionAngle
 {
@@ -66,31 +60,42 @@ enum TurnDirection
 };
 #pragma endregion
 
-#pragma region function prototypes
+#pragma region Function Prototypes
 void CreateAdjacenyMatrix(Array2D<float>*, int, int);
 void RotateRobot(InertialUnit*, DirectionAngle, TurnDirection, TurnDirection);
+const double* GetGpsCoordinateToWatch(DirectionAngle facing_direction);
+bool CheckIfReachedTarget(bool, const double*, double);
 TurnDirection GetTurnDirection(float, float);
 float RadianToDegree(double);
 bool CheckIfMovingDiagonally();
+bool CheckIfMovementIsPositiveVE(DirectionAngle);
+void UpdatePosition(DirectionAngle direction, int* position);
 void Move();
 void SetUp();
 void CleanUp();
 void StopMove();
+void ResetDecisionVariables();
+DirectionAngle ChooseRandomMove();
+DirectionAngle ExploitEnvironment(Array2D<float>*);
 #pragma endregion
 
 /* Maybe change these to defines instead, more performant */
-#pragma region global constants
+#pragma region Global Constants
 const int NUMBER_OF_TILES_PER_METER = 2;
 const float SIZE_OF_TILE = 0.5f;
-const int NUMBER_OF_DIVISIONS = 1;
-const float MOTOR_DEFAULT_SPEED = 10.0f;
+const int NUMBER_OF_SUBDIVISIONS = 2;
+const double MOTOR_DEFAULT_SPEED = 10.0;
+const double MOTOR_STOP_SPEED = 0.0;
 const float WHEEL_RADIUS = 0.028f;
 const float DISTANCE_BETWEEN_WHEELS = 0.052f;
+const float BATTERY_LOST_PER_MOVE = 0.05f;
+const int AMOUNT_OF_MOVES = 9;
+const double DISTANCE_SENSOR_THRESHOLD = 0.0;
 #pragma endregion
 
-#pragma region global variables
+#pragma region Global Variable Declarations
 Supervisor* robot;
-Accelerometer* accelerometer;
+GPS* gps;
 Motor* left_motor;
 Motor* right_motor;
 
@@ -98,138 +103,170 @@ PositionSensor* left_sensor;
 PositionSensor* right_sensor;
 DirectionAngle previous_direction;
 
-float distance_to_travel_linear;
-float distance_to_travel_diagonal;
-std::chrono::duration<float, std::ratio<1>> time_to_travel_for_linearly;
-std::chrono::duration<float, std::ratio<1>> time_to_travel_for_diagonally;
+double distance_to_travel_linear;
 
-float linear_velocity;
-float rotation_rate;
-float turning_duration;
 int timeStep;
-bool should_rotate = true;
-bool should_move = true;
+bool should_rotate;
+bool should_move;
 bool rotation_first_iteration;
-bool move_delay_thread_started;
-int xyz = 0;
+int xyz;
 #pragma endregion
 
 
 int main(int argc, char **argv)
 {
-    using namespace std::chrono;
+ #pragma region Local Variable Declarations
+    TurnDirection turn_direction;
+    TurnDirection opposite_turn_direction;
+    DirectionAngle turn_to;
+    DistanceSensor* ds2;
 
-#pragma region setup
+    InertialUnit* imu;
+
+    float robot_forward_angle;
+    bool should_stop_moving;
+    bool stop_move_first_iteration;
+    bool is_movement_positive_ve;
+    const double* gps_axis_to_watch = NULL;
+    double target_distance;
+    double exploration_rate;
+    int current_position[2];
+    int new_position[2];
+    double ds2_distance;
+    float battery;
+    int current_episode;
+    int current_step_count;
+    DistanceSensor** ds_sensors = new DistanceSensor*[4];
+#pragma endregion
+
+
+#pragma region Setup
 
     SetUp();
 
     /* Robot uses supervisor so we can obtain world info as well */
     robot = new Supervisor();
 
-
     /* Gets a reference to the floor/arena */
     Node* n = robot->getFromDef("Arena");
     
     /* Get map size in meters */
-    int map_row_size = (n->getField("floorSize")->getSFVec2f())[0];
-    int map_column_size = (n->getField("floorSize")->getSFVec2f())[1];
+    double map_row_size = (n->getField("floorSize")->getSFVec2f())[0];
+    double map_column_size = (n->getField("floorSize")->getSFVec2f())[1];
 
     /* Change representation from meters to tiles */
     map_row_size *= NUMBER_OF_TILES_PER_METER;
     map_column_size *= NUMBER_OF_TILES_PER_METER;
 
     /* Subdivide the tiles */
-    map_row_size *= NUMBER_OF_DIVISIONS;
-    map_column_size *= NUMBER_OF_DIVISIONS;
+    map_row_size *= NUMBER_OF_SUBDIVISIONS;
+    map_column_size *= NUMBER_OF_SUBDIVISIONS;
 
-    /* Create q-table and movement arrays */
-    Array2D<float> adjacency_matrix;
-    adjacency_matrix.row_count = map_row_size * map_column_size;
-    adjacency_matrix.column_count = 9;
-
+    /* Create q-table */
     Array2D<float> q_table;
     q_table.row_count = map_row_size * map_column_size;
-    q_table.column_count = 9;
+    q_table.column_count = 8;
 
-    /* Instantiate 2D adjacency matrix and q-table */
-    adjacency_matrix.array = new float*[adjacency_matrix.row_count];
-    for (int i = 0; i < adjacency_matrix.row_count; i++)
-        adjacency_matrix.array[i] = new float[adjacency_matrix.column_count];
-
+    /* Instantiate q-table */
     q_table.array = new float* [q_table.row_count];
     for (int i = 0; i < q_table.row_count; i++)
         q_table.array[i] = new float[q_table.column_count];
 
-    /* Createse adjacency matrix */
-    CreateAdjacenyMatrix(&adjacency_matrix, map_row_size, map_column_size);
+    for (int i = 0; i < q_table.row_count; i++)
+        for (int j = 0; j < q_table.column_count; j++)
+            q_table.array[i][j] = BATTERY_LOST_PER_MOVE;
 
+    //for (int i = 0; i < q_table.row_count; i++)
+    //{
+    //    for (int j = 0; j < q_table.column_count; j++)
+    //    {
+    //        std::cout << q_table.array[i][j] << " ";
+    //    }
+    //    std::cout << std::endl;
+    //}
+
+    //return 0;
+
+    timeStep = robot->getBasicTimeStep();  
 #pragma endregion
 
 
-    Node* rob = robot->getFromDef("Khepera2");
-
-    timeStep = robot->getBasicTimeStep();  
-
+#pragma region Pre-Loop Things
     /* Get both motors */
     left_motor = robot->getMotor("left wheel motor");
     right_motor = robot->getMotor("right wheel motor");
 
-    /*reseting values*/
+    /* Reseting values on start */
     left_motor->setPosition(INFINITY);
-    right_motor->setPosition(INFINITY);
-    left_motor->setVelocity(10.0);
-    right_motor->setVelocity(-10.0);        
-    left_motor->setVelocity(0.0);
-    right_motor->setVelocity(0.0);    
+    right_motor->setPosition(INFINITY);      
+    left_motor->setVelocity(MOTOR_STOP_SPEED);
+    right_motor->setVelocity(MOTOR_STOP_SPEED);
 
-    InertialUnit* imu = robot->getInertialUnit("inertial unit");
-    accelerometer = robot->getAccelerometer("accelerometer");
+    /* Get and enable the GPS and Inertial Unit */
+    imu = robot->getInertialUnit("inertial unit");
+    gps = robot->getGPS("gps");
     imu->enable(timeStep);
-    accelerometer->enable(timeStep);
+    gps->enable(timeStep);
 
+    ds_sensors[0] = robot->getDistanceSensor("ds1");
+    ds_sensors[1] = robot->getDistanceSensor("ds2");
+    ds_sensors[2] = robot->getDistanceSensor("ds3");
+    ds_sensors[3] = robot->getDistanceSensor("ds4");
+    ds_sensors[0]->enable(timeStep);
+    ds_sensors[1]->enable(timeStep);
+    ds_sensors[2]->enable(timeStep);
+    ds_sensors[3]->enable(timeStep);
+
+    /*rewards table*/
+    const int number_of_episodes = 1000;
+    int rewards_all_episodes[number_of_episodes];
+    int max_number_of_steps = 1000;
+
+    battery = 100.00;
+    //int current_reward = 0;
+
+    //int number_of_iter = 0;
+
+    current_episode = 0;
+
+    /* Variable initial values */
     previous_direction = TopCenter;
-
-    float robot_forward_angle;
-    TurnDirection turn_direction;
-    TurnDirection opposite_turn_direction;
-    DirectionAngle turn_to;
+    xyz = 0;
 
     should_rotate = true;
-    move_delay_thread_started = false;
     rotation_first_iteration = true;
+    should_rotate = true;
+    should_move = true;
 
-    left_motor->setVelocity(10.0);
-    right_motor->setVelocity(10.0);
-    double avg_accel = 0.0;
-    int number_of_iter = 0;
+    current_position[0] = 0;
+    current_position[1] = 0;
 
-    return 0;
-    while (robot->step(timeStep) != -1) //step(timestep) is a simulation step and doesnt correspon to seconds in real-time.
+    exploration_rate = 100.0;
+
+    turn_to = TopCenter;
+    current_step_count = 0;
+#pragma endregion
+
+
+    //ds2, ds3
+    //return 0;
+    while ((robot->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
     {
-        
-        /* Decide where to turn here */
-        turn_to = TopCenter;
+        srand(time(0));
 
-        switch (xyz)
+        new_position[0] = current_position[0];
+        new_position[1] = current_position[1];
+
+        /* Decide where to turn here */
+        if (rotation_first_iteration)
         {
-        case 1:
-            turn_to = TopLeft;
-            break;
-        case 2:
-            turn_to = TopRight;
-            break;
-        case 3:
-            turn_to = MiddleRight;
-            break;
-        case 4:
-            turn_to = MiddleLeft;
-            break;
-        case 5:
-            turn_to = BottomCenter;
-            break;
-        case 6:
-            turn_to = BottomRight;
-            break;
+            int explore_probability = rand() % 1;
+            //if (explore_probability >= exploration_rate)
+                turn_to = ChooseRandomMove();
+            //else
+                // turn_to = ExploitEnvironment();
+
+            UpdatePosition(turn_to, new_position);
         }
 
         if (should_rotate)
@@ -238,7 +275,7 @@ int main(int argc, char **argv)
             turn_direction = GetTurnDirection(robot_forward_angle, turn_to);
             if (rotation_first_iteration)
             {
-            std::cout << "Rotating.." << std::endl;
+                std::cout << "Rotating.." << std::endl;
                 opposite_turn_direction = (TurnDirection)(turn_direction * -1);
                 rotation_first_iteration = false;
             }
@@ -247,21 +284,73 @@ int main(int argc, char **argv)
             continue;
         }
 
+        /* Q-Learning Algorithm */
+        
+        if (should_move)
+        {
+            ds2_distance = 0;
+            for (int k = 0; k < 4; k++)
+            {
+                ds2_distance += ds_sensors[k]->getValue();
+            }
+            //ds2_distance = ds2->getValue();
+
+            if (ds2_distance != DISTANCE_SENSOR_THRESHOLD)
+            {
+                std::cout << "WHOOPS WALLLLL " << std::endl;
+                q_table.array[new_position[0]][new_position[1]] = -50.00f;
+                current_step_count++;
+                continue;
+            }
+        }
+
+        //ds2_distance = 0;
+        //for (int k = 0; k < 4; k++)
+        //{
+        //    ds2_distance += ds_sensors[k]->getValue();
+        //}
+        //std::cout << "DISTANCEEE: " << ds2_distance << std::endl;
         /* Should set variable should_rotate to true at the end of the move */
         if (should_move)
         {
             Move();
 
             should_move = false;
-            /* Wait for x amount of time before setting should_rotate to true again */
+
+            stop_move_first_iteration = true;
         }
         else
         {
-            if (!move_delay_thread_started)
+
+            if (stop_move_first_iteration)
             {
-                std::thread(StopMove).detach();
-                move_delay_thread_started = true;
+                gps_axis_to_watch = GetGpsCoordinateToWatch(turn_to);
+                is_movement_positive_ve = CheckIfMovementIsPositiveVE(turn_to);
+
+                if (is_movement_positive_ve) target_distance = *gps_axis_to_watch + distance_to_travel_linear;
+                else                         target_distance = *gps_axis_to_watch - distance_to_travel_linear;
+               
+                stop_move_first_iteration = false;
             }
+
+            //std::cout << "Distance: " << ds2->getValue() << std::endl;
+
+            //std::cout << "Target: " << target_distance << ", Current: " << *gps_axis_to_watch << std::endl;
+
+            should_stop_moving = CheckIfReachedTarget(is_movement_positive_ve, gps_axis_to_watch, target_distance);
+
+            if (should_stop_moving)
+            {
+                StopMove();
+                ResetDecisionVariables();
+            }
+
+        }
+
+        if (current_step_count == max_number_of_steps)
+        {
+            current_step_count = 0;
+            //ResetEnvironment; /* Move to next episode */
         }
 
     }
@@ -326,40 +415,68 @@ TurnDirection GetTurnDirection(float angle_a, float angle_b)
     else if (angle_a < angle_b) return Anti_Clockwise;
 }
 
+bool CheckIfReachedTarget(bool is_movement_positive_ve, const double* gps_axis_to_watch, double target_distance)
+{
+    if (is_movement_positive_ve)
+    {
+        if (*gps_axis_to_watch >= target_distance) return true;
+        else return false;
+    }
+    else
+    {
+        if (*gps_axis_to_watch <= target_distance) return true;
+        else return false;
+    }
+}
+
+bool CheckIfMovementIsPositiveVE(DirectionAngle direction)
+{
+    switch (direction)
+    {
+    case TopRight:
+    case MiddleRight:
+    case BottomRight:
+    case BottomCenter:
+        return true;
+    default:
+        return false;
+    }
+}
+
+void ResetDecisionVariables()
+{
+    should_move = true;
+    should_rotate = true;
+    rotation_first_iteration = true;
+    xyz++;
+}
+
 void Move()
 {
     left_motor->setVelocity(MOTOR_DEFAULT_SPEED);
     right_motor->setVelocity(MOTOR_DEFAULT_SPEED);
 }
 
-
 void StopMove()
 {
-    using namespace std::chrono;
+    left_motor->setVelocity(MOTOR_STOP_SPEED);
+    right_motor->setVelocity(MOTOR_STOP_SPEED);
+}
 
-    std::chrono::duration<float, std::ratio<1>> sleep_for;
-
-    if (CheckIfMovingDiagonally())
-        sleep_for = time_to_travel_for_diagonally;
-    else
-        sleep_for = time_to_travel_for_linearly;
-    std::cout << "Started moving.. " << std::endl;
-    high_resolution_clock::time_point time_at_movement_initiation = high_resolution_clock::now();
-    std::this_thread::sleep_for(sleep_for);
-    high_resolution_clock::time_point time_now = high_resolution_clock::now();
-
-    left_motor->setVelocity(0.0f);
-    right_motor->setVelocity(0.0f);
-
-    move_delay_thread_started = false;
-    should_move = true;
-    should_rotate = true;
-    rotation_first_iteration = true;
-    xyz++;
-
-    duration<double> time_span = duration_cast<duration<double>>(time_now - time_at_movement_initiation);
-
-    std::cout << "Done Moving.. I was supposed to move for " << time_span.count() << " seconds" << std::endl;
+const double* GetGpsCoordinateToWatch(DirectionAngle facing_direction)
+{
+    /* While diagonally/linearly, we can simply check the x-axis to determine if
+       we've reached our destination. There exist 2 exceptions (TopCenter/BottomCenter)
+       which need to be watched on the z-axis instead.
+    */
+    switch (facing_direction)
+    {
+    case TopCenter:
+    case BottomCenter:
+        return &(gps->getValues()[2]);
+    default:
+        return &(gps->getValues()[0]);
+    }
 }
 
 bool CheckIfMovingDiagonally()
@@ -481,15 +598,81 @@ void CreateAdjacenyMatrix(Array2D<float>* table, int map_row_count, int map_colu
     }
 }
 
+DirectionAngle ChooseRandomMove()
+{
+    srand(time(0));
+
+    int move_index = rand() % AMOUNT_OF_MOVES;
+    
+    std::cout << "Chose: " << move_index << std::endl;
+
+    switch (move_index)
+    {
+    case 1:
+        return TopLeft;
+    case 2:
+        return TopCenter;
+    case 3:
+        return TopRight;
+    case 4:
+        return MiddleLeft;
+    case 5:
+        return MiddleRight;
+    case 6:
+        return BottomLeft;
+    case 7:
+        return BottomCenter;
+    case 8:
+        return BottomRight;
+    default:
+        return TopCenter;
+    }
+}
+
+DirectionAngle ExploitEnvironment(Array2D<float>* q_table)
+{
+
+}
+
+void UpdatePosition(DirectionAngle direction, int* position)
+{
+    std::cout << "DirectionAngle: " << direction << std::endl;
+    switch (direction)
+    {
+    case TopLeft:
+        position[0] -= 1;
+        position[1] -= 1;
+        break;
+    case TopCenter:
+        position[0] -= 1;
+        break;
+    case TopRight:
+        position[0] -= 1;
+        position[1] += 1;
+        break;
+    case MiddleLeft:
+        position[1] -= 1;
+        break;
+    case MiddleRight:
+        position[1] += 1;
+        break;
+    case BottomLeft:
+        position[0] += 1;
+        position[1] -= 1;
+        break;
+    case BottomCenter:
+        position[0] += 1;
+        break;
+    case BottomRight:
+        position[0] += 1;
+        position[1] += 1;
+        break;
+    }
+}
+
 void SetUp()
 {
-    //distance_to_travel_linear = (SIZE_OF_TILE/NUMBER_OF_DIVISIONS)/2;
-    distance_to_travel_linear = 0.5f;
-    distance_to_travel_diagonal = sqrt(distance_to_travel_linear * distance_to_travel_linear * 2);
-    time_to_travel_for_linearly = std::chrono::duration<float, std::ratio<1>>((distance_to_travel_linear / 0.1758392f) * 3.0f);
-    time_to_travel_for_diagonally = std::chrono::duration<float, std::ratio<1>>((distance_to_travel_diagonal / 0.1758392f) * 3.0f);
-
-    std::cout << "TIME TO MOVE LINEARLY " << distance_to_travel_linear / MOTOR_DEFAULT_SPEED << " FOR " << distance_to_travel_linear << " METERS" << std::endl;
+    distance_to_travel_linear = SIZE_OF_TILE/NUMBER_OF_SUBDIVISIONS;
 }
 
 void CleanUp()
