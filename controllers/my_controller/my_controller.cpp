@@ -76,7 +76,7 @@ void CleanUp();
 void StopMove();
 void ResetDecisionVariables();
 DirectionAngle ChooseRandomMove();
-DirectionAngle ExploitEnvironment(Array2D<float>*);
+DirectionAngle ExploitEnvironment(Array2D<float>*, int* position);
 #pragma endregion
 
 /* Maybe change these to defines instead, more performant */
@@ -91,6 +91,8 @@ const float DISTANCE_BETWEEN_WHEELS = 0.052f;
 const float BATTERY_LOST_PER_MOVE = 0.05f;
 const int AMOUNT_OF_MOVES = 9;
 const double DISTANCE_SENSOR_THRESHOLD = 0.0;
+const double MINIMUM_BATTERY_LEVEL = 0.0;
+const double BATTERY_START_LEVEL = 100.00;
 #pragma endregion
 
 #pragma region Global Variable Declarations
@@ -222,7 +224,7 @@ int main(int argc, char **argv)
     int rewards_all_episodes[number_of_episodes];
     int max_number_of_steps = 1000;
 
-    battery = 100.00;
+    battery = BATTERY_START_LEVEL;
     //int current_reward = 0;
 
     //int number_of_iter = 0;
@@ -264,7 +266,7 @@ int main(int argc, char **argv)
             //if (explore_probability >= exploration_rate)
                 turn_to = ChooseRandomMove();
             //else
-                // turn_to = ExploitEnvironment();
+                // turn_to = ExploitEnvironment(state);
 
             UpdatePosition(turn_to, new_position);
         }
@@ -342,14 +344,17 @@ int main(int argc, char **argv)
             if (should_stop_moving)
             {
                 StopMove();
+                battery -= BATTERY_LOST_PER_MOVE;
+                std::cout << battery << std::endl;
                 ResetDecisionVariables();
             }
 
         }
 
-        if (current_step_count == max_number_of_steps)
+        if (current_step_count == max_number_of_steps || battery == MINIMUM_BATTERY_LEVEL)
         {
             current_step_count = 0;
+            battery = BATTERY_START_LEVEL;
             //ResetEnvironment; /* Move to next episode */
         }
 
@@ -629,9 +634,36 @@ DirectionAngle ChooseRandomMove()
     }
 }
 
-DirectionAngle ExploitEnvironment(Array2D<float>* q_table)
+DirectionAngle ExploitEnvironment(Array2D<float>* q_table, int* position)
 {
+    int best_index = 0;
+    for (int i = 0; i < q_table->column_count; i++)
+    {
+        if (q_table->array[position[0]][i] > q_table->array[position[0]][best_index]) best_index = i;
+    }
 
+
+    switch (best_index)
+    {
+    case 1:
+        return TopLeft;
+    case 2:
+        return TopCenter;
+    case 3:
+        return TopRight;
+    case 4:
+        return MiddleLeft;
+    case 5:
+        return MiddleRight;
+    case 6:
+        return BottomLeft;
+    case 7:
+        return BottomCenter;
+    case 8:
+        return BottomRight;
+    default:
+        return TopCenter;
+    }
 }
 
 void UpdatePosition(DirectionAngle direction, int* position)

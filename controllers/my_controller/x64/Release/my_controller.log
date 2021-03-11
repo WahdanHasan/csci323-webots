@@ -3,11 +3,10 @@ c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_control
 c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(190): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
 c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(255): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
 c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(275): warning C4244: 'argument': conversion from 'DirectionAngle' to 'float', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(135): warning C4101: 'ds2_distance': unreferenced local variable
 c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(122): warning C4101: 'ds2': unreferenced local variable
 c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(222): warning C4101: 'rewards_all_episodes': unreferenced local variable
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(366): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(603): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(368): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(605): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
   Generating code
   2 of 626 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
