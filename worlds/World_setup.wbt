@@ -1,6 +1,6 @@
 #VRML_SIM R2021a utf8
 WorldInfo {
-  basicTimeStep 2
+  basicTimeStep 1
   coordinateSystem "NUE"
   contactProperties [
     ContactProperties {
@@ -8,8 +8,8 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation 0.6846849032087068 -0.7078176847123946 -0.17378351051371055 5.555114216743085
-  position 2.5100593764283787 2.7539281340610904 3.4855500204751753
+  orientation 0.005697182706961856 -0.865711167352495 -0.5005114552439172 3.1468496305807863
+  position -0.5765450429089518 5.7520601798210125 -3.5552793023006912
 }
 TexturedBackground {
 }
@@ -24,6 +24,14 @@ DEF Khepera Khepera1 {
   controller "my_controller"
   supervisor TRUE
   extensionSlot [
+    DistanceSensor {
+      translation 2.03924e-08 0.03 -0.02
+      rotation 0 -1 0 -1.5707953071795862
+      scale 0.742329 0.742329 0.742329
+      name "distance sensor1"
+      type "laser"
+      aperture 0.05
+    }
     GPS {
       scale 0.0455197 0.0455197 0.0455197
     }
@@ -41,9 +49,4 @@ DEF Khepera Khepera1 {
       ]
     }
   ]
-}
-E-puck {
-  translation -0.4315451506932134 -6.913456051229477e-05 -0.1471337832122933
-  rotation 0.00013229661799375725 0.9999998235312941 0.00057916749341601 -1.2174528661823696
-  controller ""
 }

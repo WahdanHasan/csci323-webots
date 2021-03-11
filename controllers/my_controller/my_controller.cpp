@@ -10,6 +10,7 @@
 #include <webots/PositionSensor.hpp>
 #include <webots/Supervisor.hpp>
 #include <webots/InertialUnit.hpp>
+#include <webots/Lidar.hpp>
 #include <webots/GPS.hpp>
 #include <iostream>
 #include <time.h>
@@ -83,14 +84,14 @@ DirectionAngle ExploitEnvironment(Array2D<float>*, int* position);
 #pragma region Global Constants
 const int NUMBER_OF_TILES_PER_METER = 2;
 const float SIZE_OF_TILE = 0.5f;
-const int NUMBER_OF_SUBDIVISIONS = 2;
+const int NUMBER_OF_SUBDIVISIONS = 5;
 const double MOTOR_DEFAULT_SPEED = 10.0;
 const double MOTOR_STOP_SPEED = 0.0;
 const float WHEEL_RADIUS = 0.028f;
 const float DISTANCE_BETWEEN_WHEELS = 0.052f;
 const float BATTERY_LOST_PER_MOVE = 0.05f;
 const int AMOUNT_OF_MOVES = 9;
-const double DISTANCE_SENSOR_THRESHOLD = 0.0;
+const double DISTANCE_SENSOR_THRESHOLD = 1000.0;
 const double MINIMUM_BATTERY_LEVEL = 0.0;
 const double BATTERY_START_LEVEL = 100.00;
 #pragma endregion
@@ -103,6 +104,7 @@ Motor* right_motor;
 
 PositionSensor* left_sensor;
 PositionSensor* right_sensor;
+Lidar* lidar;
 DirectionAngle previous_direction;
 
 double distance_to_travel_linear;
@@ -121,7 +123,6 @@ int main(int argc, char **argv)
     TurnDirection turn_direction;
     TurnDirection opposite_turn_direction;
     DirectionAngle turn_to;
-    DistanceSensor* ds2;
 
     InertialUnit* imu;
 
@@ -134,11 +135,11 @@ int main(int argc, char **argv)
     double exploration_rate;
     int current_position[2];
     int new_position[2];
-    double ds2_distance;
+    double laser_sensor_distance;
     float battery;
     int current_episode;
     int current_step_count;
-    DistanceSensor** ds_sensors = new DistanceSensor*[4];
+    const int laser_sensor_count = 1;
 #pragma endregion
 
 
@@ -207,17 +208,22 @@ int main(int argc, char **argv)
     /* Get and enable the GPS and Inertial Unit */
     imu = robot->getInertialUnit("inertial unit");
     gps = robot->getGPS("gps");
+    //lidar = robot->getLidar("lidar");
     imu->enable(timeStep);
     gps->enable(timeStep);
+    //lidar->enable(timeStep);
 
-    ds_sensors[0] = robot->getDistanceSensor("ds1");
-    ds_sensors[1] = robot->getDistanceSensor("ds2");
-    ds_sensors[2] = robot->getDistanceSensor("ds3");
-    ds_sensors[3] = robot->getDistanceSensor("ds4");
-    ds_sensors[0]->enable(timeStep);
-    ds_sensors[1]->enable(timeStep);
-    ds_sensors[2]->enable(timeStep);
-    ds_sensors[3]->enable(timeStep);
+    DistanceSensor** laser_sensors = new DistanceSensor*[laser_sensor_count];
+    laser_sensors[0] = robot->getDistanceSensor("distance sensor1");
+    //laser_sensors[1] = robot->getDistanceSensor("distance sensor2");
+    //laser_sensors[2] = robot->getDistanceSensor("distance sensor3");
+    //laser_sensors[3] = robot->getDistanceSensor("distance sensor4");
+    //laser_sensors[4] = robot->getDistanceSensor("distance sensor5");
+    laser_sensors[0]->enable(timeStep);
+    //laser_sensors[1]->enable(timeStep);
+    //laser_sensors[2]->enable(timeStep);
+    //laser_sensors[3]->enable(timeStep);
+    //laser_sensors[4]->enable(timeStep);
 
     /*rewards table*/
     const int number_of_episodes = 1000;
@@ -252,10 +258,14 @@ int main(int argc, char **argv)
 
     //ds2, ds3
     //return 0;
+    srand(time(0));
+    int eee = 0;
+    int ppp = 0;
+
     while ((robot->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
     {
-        srand(time(0));
-
+        eee++;
+        //std::cout << laser_sensor->getValue() << std::endl;
         new_position[0] = current_position[0];
         new_position[1] = current_position[1];
 
@@ -277,7 +287,7 @@ int main(int argc, char **argv)
             turn_direction = GetTurnDirection(robot_forward_angle, turn_to);
             if (rotation_first_iteration)
             {
-                std::cout << "Rotating.." << std::endl;
+                //std::cout << "Rotating.." << std::endl;
                 opposite_turn_direction = (TurnDirection)(turn_direction * -1);
                 rotation_first_iteration = false;
             }
@@ -288,20 +298,18 @@ int main(int argc, char **argv)
 
         /* Q-Learning Algorithm */
         
-        if (should_move)
+        if (should_move) 
         {
-            ds2_distance = 0;
-            for (int k = 0; k < 4; k++)
+            laser_sensor_distance = 0;
+            for(int k = 0 ; k < laser_sensor_count; k++)
+                laser_sensor_distance += laser_sensors[k]->getValue();
+            //std::cout << "DISTANCE: " << laser_sensor_distance << " " << (DISTANCE_SENSOR_THRESHOLD * laser_sensor_count) << std::endl;
+            if (laser_sensor_distance != DISTANCE_SENSOR_THRESHOLD * laser_sensor_count)
             {
-                ds2_distance += ds_sensors[k]->getValue();
-            }
-            //ds2_distance = ds2->getValue();
-
-            if (ds2_distance != DISTANCE_SENSOR_THRESHOLD)
-            {
-                std::cout << "WHOOPS WALLLLL " << std::endl;
+                std::cout << "WHOOPS WALLLLL " << laser_sensor_distance << std::endl;
                 q_table.array[new_position[0]][new_position[1]] = -50.00f;
                 current_step_count++;
+                ResetDecisionVariables();
                 continue;
             }
         }
@@ -331,13 +339,20 @@ int main(int argc, char **argv)
 
                 if (is_movement_positive_ve) target_distance = *gps_axis_to_watch + distance_to_travel_linear;
                 else                         target_distance = *gps_axis_to_watch - distance_to_travel_linear;
+                //if (is_movement_positive_ve) target_distance = ((*gps_axis_to_watch + distance_to_travel_linear)/ distance_to_travel_linear)*distance_to_travel_linear;
+                //else                         target_distance = ((*gps_axis_to_watch - distance_to_travel_linear) / distance_to_travel_linear) * distance_to_travel_linear;
                
+                //if (is_movement_positive_ve) target_distance = floorf((*gps_axis_to_watch + distance_to_travel_linear) * 100000)/100000;
+                //else                         target_distance = floorf((*gps_axis_to_watch - distance_to_travel_linear) * 100000)/100000;
                 stop_move_first_iteration = false;
+                ppp++;
             }
-
+            //std::cout << "hi";
+            //if ((std::fmod(target_distance, 0.01) > 0.008 && std::fmod(target_distance, 0.01) <= 0.01) || (std::fmod(target_distance, 0.01) < 0.002 && std::fmod(target_distance, 0.01) >= 0.000999))
+            //    std::cout << "TOO INACCURATE " << target_distance << " " << std::fmod(target_distance, 0.01) << std::endl;
             //std::cout << "Distance: " << ds2->getValue() << std::endl;
-
-            //std::cout << "Target: " << target_distance << ", Current: " << *gps_axis_to_watch << std::endl;
+            if(eee%500 == 0) 
+            std::cout << "Target: " << target_distance << ", Current: " << *gps_axis_to_watch << " " << ppp << std::endl;
 
             should_stop_moving = CheckIfReachedTarget(is_movement_positive_ve, gps_axis_to_watch, target_distance);
 
@@ -345,7 +360,7 @@ int main(int argc, char **argv)
             {
                 StopMove();
                 battery -= BATTERY_LOST_PER_MOVE;
-                std::cout << battery << std::endl;
+                //std::cout << battery << std::endl;
                 ResetDecisionVariables();
             }
 
@@ -357,6 +372,8 @@ int main(int argc, char **argv)
             battery = BATTERY_START_LEVEL;
             //ResetEnvironment; /* Move to next episode */
         }
+
+        
 
     }
 
@@ -395,7 +412,7 @@ void RotateRobot(InertialUnit* imu, DirectionAngle robot_forward_angle_delta, Tu
     {
         left_motor->setVelocity(0.0f);
         right_motor->setVelocity(0.0f);
-        std::cout << "Done rotating..." << std::endl;
+        //std::cout << "Done rotating..." << std::endl;
         previous_direction = robot_forward_angle_delta;
         should_rotate = false;
         return;
@@ -605,11 +622,9 @@ void CreateAdjacenyMatrix(Array2D<float>* table, int map_row_count, int map_colu
 
 DirectionAngle ChooseRandomMove()
 {
-    srand(time(0));
-
     int move_index = rand() % AMOUNT_OF_MOVES;
     
-    std::cout << "Chose: " << move_index << std::endl;
+    //std::cout << "Chose: " << move_index << std::endl;
 
     switch (move_index)
     {
@@ -668,7 +683,8 @@ DirectionAngle ExploitEnvironment(Array2D<float>* q_table, int* position)
 
 void UpdatePosition(DirectionAngle direction, int* position)
 {
-    std::cout << "DirectionAngle: " << direction << std::endl;
+    //std::cout << "DirectionAngle: " << direction << std::endl;
+
     switch (direction)
     {
     case TopLeft:

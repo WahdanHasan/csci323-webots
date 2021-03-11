@@ -1,15 +1,46 @@
 ﻿  my_controller.cpp
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(167): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(190): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(255): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(275): warning C4244: 'argument': conversion from 'DirectionAngle' to 'float', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(122): warning C4101: 'ds2': unreferenced local variable
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(222): warning C4101: 'rewards_all_episodes': unreferenced local variable
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(368): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(605): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(170): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(193): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(261): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(287): warning C4244: 'argument': conversion from 'DirectionAngle' to 'float', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(230): warning C4101: 'rewards_all_episodes': unreferenced local variable
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(388): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
   Generating code
   2 of 626 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    7 functions had inline decision re-evaluated but remain unchanged
+    3 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
+Accelerometer.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Accelerometer.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Brake.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Brake.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Camera.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Camera.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Compass.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Compass.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Connector.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Connector.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Device.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Device.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+DifferentialWheels.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'DifferentialWheels.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Display.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Display.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+DistanceSensor.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'DistanceSensor.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Emitter.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Emitter.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Field.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Field.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+GPS.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'GPS.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Gyro.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Gyro.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+InertialUnit.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'InertialUnit.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Joystick.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Joystick.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Keyboard.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Keyboard.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+LED.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'LED.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Lidar.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Lidar.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+LightSensor.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'LightSensor.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Motion.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Motion.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Motor.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Motor.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Mouse.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Mouse.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Node.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Node.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Pen.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Pen.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+PositionSensor.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'PositionSensor.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Radar.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Radar.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+RangeFinder.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'RangeFinder.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Receiver.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Receiver.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Robot.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Robot.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Skin.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Skin.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Speaker.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Speaker.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+Supervisor.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'Supervisor.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
+TouchSensor.obj : warning LNK4099: PDB 'vc141.pdb' was not found with 'TouchSensor.obj' or at 'C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\vc141.pdb'; linking object as if no debug info
   my_controller.vcxproj -> C:\Users\wahda\Desktop\Stuff\CSCI323_Projec\controllers\my_controller\my_controller.exe
