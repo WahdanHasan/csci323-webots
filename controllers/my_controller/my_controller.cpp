@@ -47,14 +47,14 @@ struct Array2D
 */
 enum DirectionAngle
 {
-    TopRight,
-    MiddleRight,
-    BottomRight,
-    BottomCenter,
-    BottomLeft,
-    MiddleLeft,
     TopLeft,
     TopCenter,
+    TopRight,
+    MiddleLeft,
+    MiddleRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight,
     INVALID,
 };
 //enum DirectionAngle
@@ -94,7 +94,9 @@ void SetGoalPosition(DirectionAngle, double*, double*, double*);
 DirectionAngle DecideMove(double, Array2D<double>*, int*, int*);
 void ResetDecisionVariables();
 DirectionAngle ChooseRandomMove();
-DirectionAngle ExploitEnvironment(Array2D<double>*, int*);
+DirectionAngle GetStateBestDirectionAngle(Array2D<double>*, int*);
+void UpdateNewPositionScore(Array2D<double>*, DirectionAngle, int*, double*, double);
+int GetDirectionIndex(DirectionAngle);
 #pragma endregion
 
 #pragma region Global Constants
@@ -111,7 +113,15 @@ const double MINIMUM_BATTERY_LEVEL = 0.0;
 const double BATTERY_START_LEVEL = 100.00;
 const int AMOUNT_OF_MOVES = 8;
 const double EXPLORATION_RATE_DECAY_RATE = 0.01;
-const double BATTERY_LOST_PER_MOVE = 0.05;
+const double BATTERY_LOST_PER_MOVE = 1.0;
+const double REWARD_OBSTRUCTION = -50.00;
+const double REWARD_EMPTY = -1;
+const double REWARD_DIRT = 10;
+const double LEARNING_RATE = 0.1;
+const double DISCOUNT_RATE = 0.99;
+const double MINIMUM_EXPLORATION_RATE = 1.0;
+const double MAX_EXPLORATION_RATE = 100.0;
+const double EXPLORATION_DECAY_RATE = -1.0;
 #pragma endregion
 
 #pragma region Global Variable Declarations
@@ -129,6 +139,8 @@ bool should_rotate;
 bool should_move;
 bool stop_move_first_iteration;
 bool rotation_first_iteration;
+double map_row_size;
+double map_column_size;
 #pragma endregion
 
 
@@ -137,21 +149,17 @@ int main(int argc, char **argv)
 
 
 #pragma region Local Variable Declarations
+    DirectionAngle turn_to;
     TurnDirection turn_direction;
     TurnDirection opposite_turn_direction;
-    DirectionAngle turn_to;
-
     InertialUnit* imu;
     Node* arena;
 
-    double robot_forward_angle;
-    bool should_stop_moving;
-    bool is_movement_positive_ve;
     const double* robot_gps_axis_to_watch = NULL;
+    const int laser_sensor_count = 3;
+    double robot_forward_angle;
     double target_distance;
     double laser_sensor_distance;
-    const int laser_sensor_count = 3;
-    int axis_to_watch;
     double s1;
     double s2;
     double n1;
@@ -164,28 +172,29 @@ int main(int argc, char **argv)
     double arena_column_size;
     double tile_row_count;
     double tile_column_count;
-    double map_row_size;
-    double map_column_size;
+    bool should_stop_moving;
+    bool is_path_obstructed;
+    bool is_movement_positive_ve;
+    int axis_to_watch;
 #pragma endregion
 
 
 #pragma region Q-Learning Variable Declarations
     Array2D<double> q_table;
+    const int number_of_episodes = 1000;
+    double battery;
+    double exploration_rate;
+    double explore_probability;
+    double current_episode_reward;
+    double rewards_all_episodes[number_of_episodes];
     int start_position_row;
     int start_position_column;
     int current_position[2];
     int new_position[2];
-    double battery;
-    int current_episode;
-    //int current_step_count;
-    double exploration_rate;
-    double explore_probability;
-    const int number_of_episodes = 1000;
-    int rewards_all_episodes[number_of_episodes];
-    //int max_number_of_steps = 1000;
-    //int current_reward = 0;
+    int current_episode = 0;
+    
 
-    //int number_of_iter = 0;
+
 
 #pragma endregion
 
@@ -210,9 +219,12 @@ int main(int argc, char **argv)
     tile_column_count = NUMBER_OF_TILES_PER_METER * arena_column_size;
 
     /* Initialize map row and column size */
-    map_row_size = (NUMBER_OF_SUBDIVISIONS * tile_row_count) - (tile_row_count - 1);
-    map_column_size = (NUMBER_OF_SUBDIVISIONS * tile_column_count) - (tile_column_count - 1);
+    //map_row_size = (NUMBER_OF_SUBDIVISIONS * tile_row_count) - (tile_row_count - 1);
+    //map_column_size = (NUMBER_OF_SUBDIVISIONS * tile_column_count) - (tile_column_count - 1);
 
+    map_row_size = (tile_row_count * NUMBER_OF_SUBDIVISIONS) - 1;
+    map_column_size = (tile_column_count * NUMBER_OF_SUBDIVISIONS) - 1;
+    
     /* Initialize q-table */
     q_table.row_count = map_row_size * map_column_size;
     q_table.column_count = AMOUNT_OF_MOVES;
@@ -282,6 +294,11 @@ int main(int argc, char **argv)
     should_move = true;
     stop_move_first_iteration = true;
 
+    for (int i = 0; i < number_of_episodes; i++)
+    {
+        rewards_all_episodes[i] = 0.0;
+    }
+
 
 
     srand(time(0));
@@ -290,9 +307,42 @@ int main(int argc, char **argv)
     std::cout << "Rover Starting: " << current_position[0] << ", " << current_position[1] << std::endl;
 #pragma endregion
 
+    int numba_of_taim = 0;
 
     while ((robot->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
     {
+
+
+#pragma region If End of Episode
+        /* Move to next episode if max steps reached or battery runs out */
+        if (battery <= MINIMUM_BATTERY_LEVEL)
+        {
+            exploration_rate = MINIMUM_EXPLORATION_RATE + (MAX_EXPLORATION_RATE - MINIMUM_EXPLORATION_RATE) * exp(EXPLORATION_DECAY_RATE * current_episode);
+
+            battery = BATTERY_START_LEVEL;
+
+            rewards_all_episodes[current_episode] = current_episode_reward;
+            current_episode++;
+
+            ResetDecisionVariables();
+
+
+            double average = 0.0;
+
+            for (int i = 0; i < current_episode; i++)
+            {
+                average += rewards_all_episodes[i];
+            }
+
+            average /= current_episode;
+
+            std::cout << "Average for episode: " << average << "            Hit the wall " << numba_of_taim << " times." << std::endl;
+
+            current_episode_reward = 0.0;
+
+            //ResetEnvironment(); /* Move to next episode */
+        }
+#pragma endregion
 
 
 #pragma region Rotation
@@ -324,9 +374,9 @@ int main(int argc, char **argv)
             if (stop_move_first_iteration)
             {
                 SetGoalPosition(turn_to, &x_coordinate_new, &z_coordinate_new, &target_distance);
-                
+
                 stop_move_first_iteration = false;
-                          
+
                 if (rotation_first_iteration)
                 {
                     s1 = gps->getValues()[0] * -1;
@@ -339,38 +389,42 @@ int main(int argc, char **argv)
 
                     n1 += s1;
                     n2 += s2;
+
+                    std::string s;
+                    switch (turn_to)
+                    {
+                    case TopLeft:
+                        s = "TOP LEFT";
+                        break;
+                    case TopCenter:
+                        s = "TOP CENTER";
+                        break;
+                    case TopRight:
+                        s = "TOP RIGHT";
+                        break;
+                    case MiddleLeft:
+                        s = "MIDDLE LEFT";
+                        break;
+                    case MiddleRight:
+                        s = "MIDDLE RIGHT";
+                        break;
+                    case BottomLeft:
+                        s = "BOTTOM LEFT";
+                        break;
+                    case BottomCenter:
+                        s = "BOTTOM CENTER";
+                        break;
+                    case BottomRight:
+                        s = "BOTTOM RIGHT";
+                        break;
+                    }
+
+                    //std::cout << "MOVEMENT DIRECTION: " << s << "          MOVEMENT IJ: (" << current_position[0] << ", " << current_position[1] << ")      (" << new_position[0] << ", " << new_position[1] << ")" << std::endl;
                 }
 
 
 
-                std::string s;
-                switch (turn_to)
-                {
-                case TopLeft:
-                    s = "TOP LEFT";
-                    break;
-                case TopCenter:
-                    s = "TOP CENTER";
-                    break;
-                case TopRight:
-                    s = "TOP RIGHT";
-                    break;
-                case MiddleLeft:
-                    s = "MIDDLE LEFT";
-                    break;
-                case MiddleRight:
-                    s = "MIDDLE RIGHT";
-                    break;
-                case BottomLeft:
-                    s = "BOTTOM LEFT";
-                    break;
-                case BottomCenter:
-                    s = "BOTTOM CENTER";
-                    break;
-                case BottomRight:
-                    s = "BOTTOM RIGHT";
-                    break;
-                }
+
                 //std::cout << "(" << x_coordinate_new << ", " << z_coordinate_new << ") (" << n1 << ", " << n2 << "): " << RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)) << " " << robot_forward_angle << " " << s  << " " << target_distance << std::endl;
 
             }
@@ -392,34 +446,38 @@ int main(int argc, char **argv)
 
 
         /*                                        Q-Learning Algorithm                                      */
-        
-        if (should_move) 
+
+        if (should_move)
         {
-            bool is_path_obstructed = IsFacingObstacle(laser_sensors, laser_sensor_count);
+            battery -= BATTERY_LOST_PER_MOVE;
+
+            std::cout << "Battery left: " << battery << std::endl;
+
+            is_path_obstructed = IsFacingObstacle(laser_sensors, laser_sensor_count);
 
             if (is_path_obstructed)
             {
-                //UpdateNewPositionScore(q_table.array, new_position);
 
-                //q_table.array[new_position[0]][new_position[1]] = -50.00f;
+                UpdateNewPositionScore(&q_table, turn_to, current_position, &current_episode_reward, REWARD_OBSTRUCTION);
 
-                std::cout << "WHOOPS WALL " << std::endl;
+                //std::cout << "WHOOPS WALL " << std::endl;
+                numba_of_taim++;
 
                 ResetDecisionVariables();
                 continue;
             }
 
         }
-
 #pragma endregion
 
 
 #pragma region Movement
-        /*                                                  MOVEMENT                                                                */    
+        /*                                                  MOVEMENT                                                                */
 
         /* Should set variable should_rotate to true at the end of the move */
         if (should_move)
         {
+            //std::cout << "Current Position: (" << current_position[0] << ", " << current_position[1] << ")" << "   " << z_coordinate_old << std::endl;
             Move();
             is_movement_positive_ve = CheckIfMovementIsPositiveVE(turn_to);
 
@@ -430,7 +488,7 @@ int main(int argc, char **argv)
 
             // std::cout << is_movement_positive_ve << " " << "Target: " << target_distance << ", Current: " << *robot_gps_axis_to_watch << std::endl;
 
-            
+
             should_stop_moving = CheckIfReachedTarget(is_movement_positive_ve, robot_gps_axis_to_watch, target_distance);
 
             if (should_stop_moving)
@@ -440,7 +498,6 @@ int main(int argc, char **argv)
                 x_coordinate_old = x_coordinate_new;
                 z_coordinate_old = z_coordinate_new;
                 StopMove();
-                battery -= BATTERY_LOST_PER_MOVE;
                 ResetDecisionVariables();
             }
 
@@ -448,20 +505,51 @@ int main(int argc, char **argv)
 #pragma endregion
 
 
-        /* Move to next episode if max steps reached or battery runs out */
-        if (battery == MINIMUM_BATTERY_LEVEL)
-        {
-            battery = BATTERY_START_LEVEL;
-            
-            ResetDecisionVariables();
-
-            //ResetEnvironment(); /* Move to next episode */
-        }
     }
-
 
     CleanUp();
     return 0;
+}
+
+/* Updates the q-value for the q-table and the current episode reward */
+void UpdateNewPositionScore(Array2D<double>* q_table, DirectionAngle direction, int* current_position, double* current_episode_reward, double reward)
+{
+    int action = GetDirectionIndex(direction);
+    int state = (map_row_size * current_position[0]) + action;
+
+    *current_episode_reward += reward;
+
+    int best_action_index = (int)GetStateBestDirectionAngle(q_table, current_position);
+
+    //std::cout << "State-Action: (" << state << ", " << action << ") " << map_row_size << " " << current_position[0] << std::endl;
+
+    q_table->array[state][action] = (1 - LEARNING_RATE) * q_table->array[state][action] 
+        + LEARNING_RATE * (reward + DISCOUNT_RATE * q_table->array[state][best_action_index]);
+
+    std::cout << "Bellmond boi: " << q_table->array[state][action] << std::endl;
+}
+
+int GetDirectionIndex(DirectionAngle direction)
+{
+    switch (direction)
+    {
+    case TopLeft:
+        return 0;
+    case TopCenter:
+        return 1;
+    case TopRight:
+        return 2;
+    case MiddleLeft:
+        return 3;
+    case MiddleRight:
+        return 4;
+    case BottomLeft:
+        return 5;
+    case BottomCenter:
+        return 6;
+    case BottomRight:
+        return 7;
+    }
 }
 
 /* Checks if the next move is obstructed */
@@ -529,7 +617,9 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int*
     if (explore_probability <= exploration_rate)
         turn_to = ChooseRandomMove();
     else
-        turn_to = ExploitEnvironment(q_table, current_position);
+        turn_to = GetStateBestDirectionAngle(q_table, current_position);
+
+    turn_to = TopCenter;
 
     UpdatePosition(turn_to, new_position);
 
@@ -790,7 +880,7 @@ DirectionAngle ChooseRandomMove()
 }
 
 /* Chooses the best action based on the current state */
-DirectionAngle ExploitEnvironment(Array2D<double>* q_table, int* position)
+DirectionAngle GetStateBestDirectionAngle(Array2D<double>* q_table, int* position)
 {
     int best_index = 0;
     for (int j = 0; j < q_table->column_count; j++)
