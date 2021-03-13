@@ -8,8 +8,8 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation 0.005697182706961856 -0.865711167352495 -0.5005114552439172 3.1468496305807863
-  position -0.5765450429089518 5.7520601798210125 -3.5552793023006912
+  orientation -0.17224018140930744 -0.9482532973222093 -0.26673770641895833 1.987450258136758
+  position -1.0927887625973476 0.7125031117339373 -0.5041391319814089
 }
 TexturedBackground {
 }
@@ -25,7 +25,23 @@ DEF Khepera Khepera1 {
   supervisor TRUE
   extensionSlot [
     DistanceSensor {
-      translation 2.03924e-08 0.03 -0.02
+      translation -0.0282844 0.03 -0.0282841
+      rotation 0 1 0 2.3562
+      scale 0.742329 0.742329 0.742329
+      name "distance sensor2"
+      type "laser"
+      aperture 0.05
+    }
+    DistanceSensor {
+      translation 0.0282844 0.03 -0.0282841
+      rotation 0 -1 0 -0.785395307179586
+      scale 0.742329 0.742329 0.742329
+      name "distance sensor3"
+      type "laser"
+      aperture 0.05
+    }
+    DistanceSensor {
+      translation 4.07848e-08 0.03 -0.04
       rotation 0 -1 0 -1.5707953071795862
       scale 0.742329 0.742329 0.742329
       name "distance sensor1"

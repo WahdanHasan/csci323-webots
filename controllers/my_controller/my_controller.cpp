@@ -7,10 +7,8 @@
 #pragma region include statements
 #include <webots/DistanceSensor.hpp>
 #include <webots/Motor.hpp>
-#include <webots/PositionSensor.hpp>
 #include <webots/Supervisor.hpp>
 #include <webots/InertialUnit.hpp>
-#include <webots/Lidar.hpp>
 #include <webots/GPS.hpp>
 #include <iostream>
 #include <time.h>
@@ -51,8 +49,19 @@ enum DirectionAngle
     BottomLeft = 135,
     MiddleLeft = 90,
     TopLeft = 45,
-    TopCenter = 360,
+    TopCenter = 0,
 };
+//enum DirectionAngle
+//{
+//    TopRight = 135,
+//    MiddleRight = 90,
+//    BottomRight = 45,
+//    BottomCenter = 360,
+//    BottomLeft = 315,
+//    MiddleLeft = 270,
+//    TopLeft = 225,
+//    TopCenter = 180,
+//};
 
 enum TurnDirection
 {
@@ -64,20 +73,24 @@ enum TurnDirection
 #pragma region Function Prototypes
 void CreateAdjacenyMatrix(Array2D<float>*, int, int);
 void RotateRobot(InertialUnit*, DirectionAngle, TurnDirection, TurnDirection);
-const double* GetGpsCoordinateToWatch(DirectionAngle facing_direction);
+const double* GetGpsCoordinateToWatch(DirectionAngle);
 bool CheckIfReachedTarget(bool, const double*, double);
 TurnDirection GetTurnDirection(float, float);
-float RadianToDegree(double);
+float RadianTo360Degree(double);
 bool CheckIfMovingDiagonally();
 bool CheckIfMovementIsPositiveVE(DirectionAngle);
-void UpdatePosition(DirectionAngle direction, int* position);
+void UpdatePosition(DirectionAngle, int*);
 void Move();
 void SetUp();
 void CleanUp();
 void StopMove();
+bool IsFacingObstacle(DistanceSensor**, int laser_sensor_count);
+void SetGoal(DirectionAngle, double*, double*, double*);
+DirectionAngle DecideMove(double, Array2D<float>*, int*, int*);
 void ResetDecisionVariables();
 DirectionAngle ChooseRandomMove();
-DirectionAngle ExploitEnvironment(Array2D<float>*, int* position);
+DirectionAngle ExploitEnvironment(Array2D<float>*, int*);
+int GetAxisOfMovementToWatch(DirectionAngle);
 #pragma endregion
 
 /* Maybe change these to defines instead, more performant */
@@ -94,6 +107,7 @@ const int AMOUNT_OF_MOVES = 9;
 const double DISTANCE_SENSOR_THRESHOLD = 1000.0;
 const double MINIMUM_BATTERY_LEVEL = 0.0;
 const double BATTERY_START_LEVEL = 100.00;
+const double EXPLORATION_RATE_DECAY_RATE = 0.01;
 #pragma endregion
 
 #pragma region Global Variable Declarations
@@ -102,9 +116,6 @@ GPS* gps;
 Motor* left_motor;
 Motor* right_motor;
 
-PositionSensor* left_sensor;
-PositionSensor* right_sensor;
-Lidar* lidar;
 DirectionAngle previous_direction;
 
 double distance_to_travel_linear;
@@ -112,6 +123,7 @@ double distance_to_travel_linear;
 int timeStep;
 bool should_rotate;
 bool should_move;
+bool stop_move_first_iteration;
 bool rotation_first_iteration;
 int xyz;
 #pragma endregion
@@ -128,9 +140,8 @@ int main(int argc, char **argv)
 
     float robot_forward_angle;
     bool should_stop_moving;
-    bool stop_move_first_iteration;
     bool is_movement_positive_ve;
-    const double* gps_axis_to_watch = NULL;
+    const double* robot_gps_axis_to_watch = NULL;
     double target_distance;
     double exploration_rate;
     int current_position[2];
@@ -139,7 +150,8 @@ int main(int argc, char **argv)
     float battery;
     int current_episode;
     int current_step_count;
-    const int laser_sensor_count = 1;
+    const int laser_sensor_count = 3;
+    double explore_probability;
 #pragma endregion
 
 
@@ -154,16 +166,18 @@ int main(int argc, char **argv)
     Node* n = robot->getFromDef("Arena");
     
     /* Get map size in meters */
-    double map_row_size = (n->getField("floorSize")->getSFVec2f())[0];
-    double map_column_size = (n->getField("floorSize")->getSFVec2f())[1];
+    double arena_row_size = (n->getField("floorSize")->getSFVec2f())[0];
+    double arena_column_size = (n->getField("floorSize")->getSFVec2f())[1];
 
-    /* Change representation from meters to tiles */
-    map_row_size *= NUMBER_OF_TILES_PER_METER;
-    map_column_size *= NUMBER_OF_TILES_PER_METER;
+    double tile_row_count = NUMBER_OF_TILES_PER_METER * arena_row_size;
+    double tile_column_count = NUMBER_OF_TILES_PER_METER * arena_column_size;
 
-    /* Subdivide the tiles */
-    map_row_size *= NUMBER_OF_SUBDIVISIONS;
-    map_column_size *= NUMBER_OF_SUBDIVISIONS;
+    double map_row_size;
+    double map_column_size;
+
+    /* Initialize map row and column size */
+    map_row_size = (NUMBER_OF_SUBDIVISIONS * tile_row_count) - (tile_row_count - 1);
+    map_column_size = (NUMBER_OF_SUBDIVISIONS * tile_column_count) - (tile_column_count - 1);
 
     /* Create q-table */
     Array2D<float> q_table;
@@ -177,18 +191,7 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < q_table.row_count; i++)
         for (int j = 0; j < q_table.column_count; j++)
-            q_table.array[i][j] = BATTERY_LOST_PER_MOVE;
-
-    //for (int i = 0; i < q_table.row_count; i++)
-    //{
-    //    for (int j = 0; j < q_table.column_count; j++)
-    //    {
-    //        std::cout << q_table.array[i][j] << " ";
-    //    }
-    //    std::cout << std::endl;
-    //}
-
-    //return 0;
+            q_table.array[i][j] = -BATTERY_LOST_PER_MOVE;
 
     timeStep = robot->getBasicTimeStep();  
 #pragma endregion
@@ -208,22 +211,18 @@ int main(int argc, char **argv)
     /* Get and enable the GPS and Inertial Unit */
     imu = robot->getInertialUnit("inertial unit");
     gps = robot->getGPS("gps");
-    //lidar = robot->getLidar("lidar");
     imu->enable(timeStep);
     gps->enable(timeStep);
-    //lidar->enable(timeStep);
 
     DistanceSensor** laser_sensors = new DistanceSensor*[laser_sensor_count];
     laser_sensors[0] = robot->getDistanceSensor("distance sensor1");
-    //laser_sensors[1] = robot->getDistanceSensor("distance sensor2");
-    //laser_sensors[2] = robot->getDistanceSensor("distance sensor3");
-    //laser_sensors[3] = robot->getDistanceSensor("distance sensor4");
-    //laser_sensors[4] = robot->getDistanceSensor("distance sensor5");
+    laser_sensors[1] = robot->getDistanceSensor("distance sensor2");
+    laser_sensors[2] = robot->getDistanceSensor("distance sensor3");
+
     laser_sensors[0]->enable(timeStep);
-    //laser_sensors[1]->enable(timeStep);
-    //laser_sensors[2]->enable(timeStep);
-    //laser_sensors[3]->enable(timeStep);
-    //laser_sensors[4]->enable(timeStep);
+    laser_sensors[1]->enable(timeStep);
+    laser_sensors[2]->enable(timeStep);
+
 
     /*rewards table*/
     const int number_of_episodes = 1000;
@@ -245,144 +244,329 @@ int main(int argc, char **argv)
     rotation_first_iteration = true;
     should_rotate = true;
     should_move = true;
+    stop_move_first_iteration = true;
 
-    current_position[0] = 0;
-    current_position[1] = 0;
+    current_position[0] = (int) map_row_size / 2;
+    current_position[1] = (int) map_column_size / 2;
 
     exploration_rate = 100.0;
 
     turn_to = TopCenter;
     current_step_count = 0;
-#pragma endregion
-
 
     //ds2, ds3
     //return 0;
     srand(time(0));
     int eee = 0;
     int ppp = 0;
+    bool ddd = false;
+
+    std::cout << "Map Size: " << map_row_size << ", " << map_column_size << std::endl;
+    std::cout << "Rover Starting: " << current_position[0] << ", " << current_position[1] << std::endl;
+
+    double x_coordinate_new = 0.0;
+    double z_coordinate_new = 0.0;
+    double x_coordinate_old = 0.0;
+    double z_coordinate_old = 0.0;
+    int axis_to_watch;
+    double s1;
+    double s2;
+    double n1;
+    double n2;
+#pragma endregion
+
+
+
 
     while ((robot->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
     {
-        eee++;
-        //std::cout << laser_sensor->getValue() << std::endl;
-        new_position[0] = current_position[0];
-        new_position[1] = current_position[1];
+        //std::cout << RadianTo360Degree(imu->getRollPitchYaw()[2]) << " " << RadianTo360Degree(((std::atan2(-0.125, -0.125) - 1.5708) * -1)) << std::endl;
+        //std::cout << RadianTo360Degree(imu->getRollPitchYaw()[2]) << std::endl;
+        //continue;
 
-        /* Decide where to turn here */
+#pragma region Rotation
+        /* Decide where to rotate here based on exploration and exploitation */
         if (rotation_first_iteration)
         {
-            int explore_probability = rand() % 1;
-            //if (explore_probability >= exploration_rate)
-                turn_to = ChooseRandomMove();
-            //else
-                // turn_to = ExploitEnvironment(state);
+            x_coordinate_new = x_coordinate_old;
+            z_coordinate_new = z_coordinate_old;
 
-            UpdatePosition(turn_to, new_position);
+            new_position[0] = current_position[0];
+            new_position[1] = current_position[1];
+
+            turn_to = DecideMove(exploration_rate, &q_table, current_position, new_position);
+            //turn_to = TopCenter;
         }
 
+        /* Begin rotation here */
         if (should_rotate)
         {
-            robot_forward_angle = RadianToDegree(imu->getRollPitchYaw()[2]);
-            turn_direction = GetTurnDirection(robot_forward_angle, turn_to);
+            robot_gps_axis_to_watch = GetGpsCoordinateToWatch(turn_to);
+            //std::cout << "YOYOYOYO: " << *robot_gps_axis_to_watch << std::endl;
+
+            //is_movement_positive_ve = CheckIfMovementIsPositiveVE(turn_to);
+            robot_forward_angle = RadianTo360Degree(imu->getRollPitchYaw()[2]);
+
+            if (stop_move_first_iteration)
+            {
+                if (robot_forward_angle <= 0.001)
+                {
+                    ResetDecisionVariables();
+                    continue;
+                }
+
+                SetGoal(turn_to, &x_coordinate_new, &z_coordinate_new, &target_distance);
+                
+                stop_move_first_iteration = false;
+                          
+                if (rotation_first_iteration)
+                {
+                    s1 = gps->getValues()[0] * -1;
+                    s2 = gps->getValues()[2] * -1;
+
+                    std::cout << "Coords: " << "(" << x_coordinate_old << ", " << z_coordinate_old << ") (" << gps->getValues()[0] << ", " << gps->getValues()[2] << ")" << std::endl;
+
+                    //s1 = x_coordinate_old * -1;
+                    //s2 = z_coordinate_old * -1;
+
+                    n1 = x_coordinate_new;
+                    n2 = z_coordinate_new;
+
+                    n1 += s1;
+                    n2 += s2;
+                    //n1 *= -1;
+                    //n2 *= -1;
+                    //std::cout << s1 << " " << s2 << std::endl;
+                }
+
+
+
+                //std::cout << n1 << " " << n2 << std::endl;
+
+
+
+                //std::cout << (RadianTo360Degree(std::atan2(n2, n1) * 1)) << std::endl;
+                //std::cout << "Values: (" << gps->getValues()[0] << ", " << gps->getValues()[1] << ", " << gps->getValues()[2] << ")" << " " << target_distance << std::endl;
+                std::string s;
+                switch (turn_to)
+                {
+                case TopLeft:
+                    s = "TOP LEFT";
+                    break;
+                case TopCenter:
+                    s = "TOP CENTER";
+                    break;
+                case TopRight:
+                    s = "TOP RIGHT";
+                    break;
+                case MiddleLeft:
+                    s = "MIDDLE LEFT";
+                    break;
+                case MiddleRight:
+                    s = "MIDDLE RIGHT";
+                    break;
+                case BottomLeft:
+                    s = "BOTTOM LEFT";
+                    break;
+                case BottomCenter:
+                    s = "BOTTOM CENTER";
+                    break;
+                case BottomRight:
+                    s = "BOTTOM RIGHT";
+                    break;
+                }
+                std::cout << "(" << x_coordinate_new << ", " << z_coordinate_new << ") (" << n1 << ", " << n2 << "): " << RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)) << " " << robot_forward_angle << " " << s  << " " << target_distance << std::endl;
+
+            }
+
+            //std::cout << "hi: " << robot_forward_angle << " " << turn_to << std::endl;
+            turn_direction = GetTurnDirection(robot_forward_angle, RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)));
             if (rotation_first_iteration)
             {
-                //std::cout << "Rotating.." << std::endl;
                 opposite_turn_direction = (TurnDirection)(turn_direction * -1);
                 rotation_first_iteration = false;
             }
 
+            //std::cout << "TURN: " << turn_direction << ", " << opposite_turn_direction << std::endl;
+
             RotateRobot(imu, turn_to, turn_direction, opposite_turn_direction);
             continue;
         }
+#pragma endregion
+        //std::cout << "YOYOYOYO: " << *robot_gps_axis_to_watch << std::endl;
 
-        /* Q-Learning Algorithm */
+
+#pragma region Check Move Decision
+
+
+        /*                                        Q-Learning Algorithm                                      */
         
         if (should_move) 
         {
-            laser_sensor_distance = 0;
-            for(int k = 0 ; k < laser_sensor_count; k++)
-                laser_sensor_distance += laser_sensors[k]->getValue();
-            //std::cout << "DISTANCE: " << laser_sensor_distance << " " << (DISTANCE_SENSOR_THRESHOLD * laser_sensor_count) << std::endl;
-            if (laser_sensor_distance != DISTANCE_SENSOR_THRESHOLD * laser_sensor_count)
+            bool is_facing_wall = IsFacingObstacle(laser_sensors, laser_sensor_count);
+
+            if (is_facing_wall)
             {
-                std::cout << "WHOOPS WALLLLL " << laser_sensor_distance << std::endl;
-                q_table.array[new_position[0]][new_position[1]] = -50.00f;
+                //UpdateNewPositionScore(q_table.array, new_position);
+
+                //q_table.array[new_position[0]][new_position[1]] = -50.00f;
+
+                std::cout << "WHOOPS WALL " << std::endl;
                 current_step_count++;
+
                 ResetDecisionVariables();
                 continue;
             }
+
         }
 
-        //ds2_distance = 0;
-        //for (int k = 0; k < 4; k++)
-        //{
-        //    ds2_distance += ds_sensors[k]->getValue();
-        //}
-        //std::cout << "DISTANCEEE: " << ds2_distance << std::endl;
+#pragma endregion
+
+
+#pragma region Movement
+        /*                                                  MOVEMENT                                                                */    
+        eee++;
+
         /* Should set variable should_rotate to true at the end of the move */
         if (should_move)
         {
             Move();
+            is_movement_positive_ve = CheckIfMovementIsPositiveVE(turn_to);
+
+            //if (is_movement_positive_ve) target_distance = *robot_gps_axis_to_watch + distance_to_travel_linear;
+            //else                         target_distance = *robot_gps_axis_to_watch - distance_to_travel_linear;
 
             should_move = false;
 
-            stop_move_first_iteration = true;
         }
         else
         {
 
-            if (stop_move_first_iteration)
-            {
-                gps_axis_to_watch = GetGpsCoordinateToWatch(turn_to);
-                is_movement_positive_ve = CheckIfMovementIsPositiveVE(turn_to);
+            if (eee % 500 == 0)
+                ;// std::cout << is_movement_positive_ve << " " << "Target: " << target_distance << ", Current: " << *robot_gps_axis_to_watch << std::endl;
 
-                if (is_movement_positive_ve) target_distance = *gps_axis_to_watch + distance_to_travel_linear;
-                else                         target_distance = *gps_axis_to_watch - distance_to_travel_linear;
-                //if (is_movement_positive_ve) target_distance = ((*gps_axis_to_watch + distance_to_travel_linear)/ distance_to_travel_linear)*distance_to_travel_linear;
-                //else                         target_distance = ((*gps_axis_to_watch - distance_to_travel_linear) / distance_to_travel_linear) * distance_to_travel_linear;
-               
-                //if (is_movement_positive_ve) target_distance = floorf((*gps_axis_to_watch + distance_to_travel_linear) * 100000)/100000;
-                //else                         target_distance = floorf((*gps_axis_to_watch - distance_to_travel_linear) * 100000)/100000;
-                stop_move_first_iteration = false;
-                ppp++;
-            }
-            //std::cout << "hi";
-            //if ((std::fmod(target_distance, 0.01) > 0.008 && std::fmod(target_distance, 0.01) <= 0.01) || (std::fmod(target_distance, 0.01) < 0.002 && std::fmod(target_distance, 0.01) >= 0.000999))
-            //    std::cout << "TOO INACCURATE " << target_distance << " " << std::fmod(target_distance, 0.01) << std::endl;
-            //std::cout << "Distance: " << ds2->getValue() << std::endl;
-            if(eee%500 == 0) 
-            std::cout << "Target: " << target_distance << ", Current: " << *gps_axis_to_watch << " " << ppp << std::endl;
+            //if (std::fmod(target_distance, 0.01) < 0.006 && std::fmod(target_distance, 0.01) > 0.004) ddd = true;
 
-            should_stop_moving = CheckIfReachedTarget(is_movement_positive_ve, gps_axis_to_watch, target_distance);
+            //if (ddd) std::cout << "TOO INACCURATE." << std::endl;
+            
+            should_stop_moving = CheckIfReachedTarget(is_movement_positive_ve, robot_gps_axis_to_watch, target_distance);
 
             if (should_stop_moving)
             {
+                current_position[0] = new_position[0];
+                current_position[1] = new_position[1];
+                x_coordinate_old = x_coordinate_new;
+                z_coordinate_old = z_coordinate_new;
                 StopMove();
                 battery -= BATTERY_LOST_PER_MOVE;
-                //std::cout << battery << std::endl;
                 ResetDecisionVariables();
             }
 
         }
+#pragma endregion
 
+
+        /* Move to next episode if max steps reached or battery runs out */
         if (current_step_count == max_number_of_steps || battery == MINIMUM_BATTERY_LEVEL)
         {
             current_step_count = 0;
             battery = BATTERY_START_LEVEL;
+            
+            ResetDecisionVariables();
+
             //ResetEnvironment; /* Move to next episode */
         }
-
-        
-
     }
+
 
     CleanUp();
     return 0;
 }
 
+bool IsFacingObstacle(DistanceSensor** laser_sensors, int laser_sensor_count)
+{
+    double laser_sensor_distance = 0;
+    for(int k = 0 ; k < laser_sensor_count; k++)
+        laser_sensor_distance += laser_sensors[k]->getValue();
+
+    if (laser_sensor_distance != DISTANCE_SENSOR_THRESHOLD * laser_sensor_count) return true;
+
+    return false;
+}
+
+void SetGoal(DirectionAngle turn_to, double* x_coordinate_new, double* z_coordinate_new, double* target_distance)
+{
+    switch (turn_to)
+    {
+    case TopLeft:
+        *x_coordinate_new += distance_to_travel_linear;
+        *z_coordinate_new += distance_to_travel_linear;
+        *target_distance = *x_coordinate_new;
+        break;
+    case TopCenter:
+        *z_coordinate_new += distance_to_travel_linear;
+        *target_distance = *z_coordinate_new;
+        break;
+    case TopRight:
+        *x_coordinate_new -= distance_to_travel_linear;
+        *z_coordinate_new += distance_to_travel_linear;
+        *target_distance = *x_coordinate_new;
+        break;
+    case MiddleLeft:
+        *x_coordinate_new += distance_to_travel_linear;
+        *target_distance = *x_coordinate_new;
+        break;
+    case MiddleRight:
+        *x_coordinate_new -= distance_to_travel_linear;
+        *target_distance = *x_coordinate_new;
+        break;
+    case BottomLeft:
+        *x_coordinate_new += distance_to_travel_linear;
+        *z_coordinate_new -= distance_to_travel_linear;
+        *target_distance = *x_coordinate_new;
+        break;
+    case BottomCenter:
+        *z_coordinate_new -= distance_to_travel_linear;
+        *target_distance = *z_coordinate_new;
+        break;
+    case BottomRight:
+        *x_coordinate_new -= distance_to_travel_linear;
+        *z_coordinate_new -= distance_to_travel_linear;
+        *target_distance = *x_coordinate_new;
+        break;
+    }
+}
+
+DirectionAngle DecideMove(double exploration_rate, Array2D<float>*q_table, int* current_position, int* new_position)
+{
+    DirectionAngle turn_to;
+    int explore_probability = rand() % 100;
+
+    if (explore_probability <= exploration_rate)
+        turn_to = ChooseRandomMove();
+    else
+        turn_to = ExploitEnvironment(q_table, current_position);
+
+    UpdatePosition(turn_to, new_position);
+
+    return turn_to;
+
+    //std::cout << "New Position: " << new_position[0] << ", " << new_position[1] << std::endl;
+}
+
+int GetAxisOfMovementToWatch(DirectionAngle direction)
+{
+    switch (direction)
+    {
+    case TopCenter:
+    case BottomCenter:
+        return 1;
+    default:
+        return 0;
+    }
+}
 /* Converts radians to degrees, also converts the -180 to 180 range to 360 to 0 */
-float RadianToDegree(double radian)
+float RadianTo360Degree(double radian)
 {
     /* Converts the angle from Radians to Degrees */
     float angle = (radian * 180) / M_PI;
@@ -391,7 +575,7 @@ float RadianToDegree(double radian)
     if (angle < 0.0f) angle = 360 - (angle * -1);
 
     /* Incase sensor is facing straight forward, we need to cover the edge case */
-    if (angle < 0.0f) return 360.0f; 
+    //if (angle < 0.0f) return 360.0f; 
 
     return angle;
 }
@@ -431,23 +615,28 @@ TurnDirection GetTurnDirection(float angle_a, float angle_b)
 {
     float angle_diff = angle_a - angle_b;
 
-    if (angle_diff > 180) return Anti_Clockwise;
-    else if (angle_diff < -180) return Clockwise;
-    else if (angle_a > angle_b) return Clockwise;
-    else if (angle_a < angle_b) return Anti_Clockwise;
+    //if (angle_diff > 180) return Anti_Clockwise;
+    //else if (angle_diff < -180) return Clockwise;
+    //else if (angle_a > angle_b) return Clockwise;
+    //else if (angle_a < angle_b) return Anti_Clockwise;
+
+    if (angle_diff > 180) return Clockwise;
+    else if (angle_diff < -180) return Anti_Clockwise;
+    else if (angle_a > angle_b) return Anti_Clockwise;
+    else if (angle_a < angle_b) return Clockwise;
 }
 
-bool CheckIfReachedTarget(bool is_movement_positive_ve, const double* gps_axis_to_watch, double target_distance)
+bool CheckIfReachedTarget(bool is_movement_positive_ve, const double* robot_gps_axis_to_watch, double target_distance)
 {
     if (is_movement_positive_ve)
     {
-        if (*gps_axis_to_watch >= target_distance) return true;
-        else return false;
+        if (*robot_gps_axis_to_watch >= target_distance) return true;
+        else                                             return false;
     }
     else
     {
-        if (*gps_axis_to_watch <= target_distance) return true;
-        else return false;
+        if (*robot_gps_axis_to_watch <= target_distance) return true;
+        else                                             return false;
     }
 }
 
@@ -459,9 +648,9 @@ bool CheckIfMovementIsPositiveVE(DirectionAngle direction)
     case MiddleRight:
     case BottomRight:
     case BottomCenter:
-        return true;
-    default:
         return false;
+    default:
+        return true;
     }
 }
 
@@ -470,6 +659,7 @@ void ResetDecisionVariables()
     should_move = true;
     should_rotate = true;
     rotation_first_iteration = true;
+    stop_move_first_iteration = true;
     xyz++;
 }
 
@@ -491,6 +681,7 @@ const double* GetGpsCoordinateToWatch(DirectionAngle facing_direction)
        we've reached our destination. There exist 2 exceptions (TopCenter/BottomCenter)
        which need to be watched on the z-axis instead.
     */
+
     switch (facing_direction)
     {
     case TopCenter:
@@ -609,7 +800,7 @@ void CreateAdjacenyMatrix(Array2D<float>* table, int map_row_count, int map_colu
             from_state_number++;
         }
     }
-
+    // (row_size * i) + j
     for (int i = 0; i < row_count; i++)
     {
         for (int j = 0; j < column_count; j++)
@@ -683,8 +874,6 @@ DirectionAngle ExploitEnvironment(Array2D<float>* q_table, int* position)
 
 void UpdatePosition(DirectionAngle direction, int* position)
 {
-    //std::cout << "DirectionAngle: " << direction << std::endl;
-
     switch (direction)
     {
     case TopLeft:
@@ -728,7 +917,5 @@ void CleanUp()
     delete robot;
     delete left_motor;
     delete right_motor;
-    delete left_sensor;
-    delete right_sensor;
 }
 
