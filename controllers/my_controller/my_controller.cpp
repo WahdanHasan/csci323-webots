@@ -50,6 +50,7 @@ enum DirectionAngle
     MiddleLeft = 90,
     TopLeft = 45,
     TopCenter = 0,
+    INVALID,
 };
 //enum DirectionAngle
 //{
@@ -77,7 +78,6 @@ const double* GetGpsCoordinateToWatch(DirectionAngle);
 bool CheckIfReachedTarget(bool, const double*, double);
 TurnDirection GetTurnDirection(float, float);
 float RadianTo360Degree(double);
-bool CheckIfMovingDiagonally();
 bool CheckIfMovementIsPositiveVE(DirectionAngle);
 void UpdatePosition(DirectionAngle, int*);
 void Move();
@@ -90,7 +90,6 @@ DirectionAngle DecideMove(double, Array2D<float>*, int*, int*);
 void ResetDecisionVariables();
 DirectionAngle ChooseRandomMove();
 DirectionAngle ExploitEnvironment(Array2D<float>*, int*);
-int GetAxisOfMovementToWatch(DirectionAngle);
 #pragma endregion
 
 /* Maybe change these to defines instead, more performant */
@@ -152,6 +151,15 @@ int main(int argc, char **argv)
     int current_step_count;
     const int laser_sensor_count = 3;
     double explore_probability;
+    int axis_to_watch;
+    double s1;
+    double s2;
+    double n1;
+    double n2;
+    double x_coordinate_new;
+    double z_coordinate_new;
+    double x_coordinate_old;
+    double z_coordinate_old;
 #pragma endregion
 
 
@@ -254,25 +262,17 @@ int main(int argc, char **argv)
     turn_to = TopCenter;
     current_step_count = 0;
 
-    //ds2, ds3
-    //return 0;
+
     srand(time(0));
-    int eee = 0;
-    int ppp = 0;
-    bool ddd = false;
 
     std::cout << "Map Size: " << map_row_size << ", " << map_column_size << std::endl;
     std::cout << "Rover Starting: " << current_position[0] << ", " << current_position[1] << std::endl;
 
-    double x_coordinate_new = 0.0;
-    double z_coordinate_new = 0.0;
-    double x_coordinate_old = 0.0;
-    double z_coordinate_old = 0.0;
-    int axis_to_watch;
-    double s1;
-    double s2;
-    double n1;
-    double n2;
+    x_coordinate_new = 0.0;
+    z_coordinate_new = 0.0;
+    x_coordinate_old = 0.0;
+    z_coordinate_old = 0.0;
+
 #pragma endregion
 
 
@@ -280,9 +280,6 @@ int main(int argc, char **argv)
 
     while ((robot->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
     {
-        //std::cout << RadianTo360Degree(imu->getRollPitchYaw()[2]) << " " << RadianTo360Degree(((std::atan2(-0.125, -0.125) - 1.5708) * -1)) << std::endl;
-        //std::cout << RadianTo360Degree(imu->getRollPitchYaw()[2]) << std::endl;
-        //continue;
 
 #pragma region Rotation
         /* Decide where to rotate here based on exploration and exploitation */
@@ -295,25 +292,29 @@ int main(int argc, char **argv)
             new_position[1] = current_position[1];
 
             turn_to = DecideMove(exploration_rate, &q_table, current_position, new_position);
-            //turn_to = TopCenter;
+
+            if (turn_to == INVALID)
+            {
+                ResetDecisionVariables();
+                continue;
+            }
         }
 
         /* Begin rotation here */
         if (should_rotate)
         {
             robot_gps_axis_to_watch = GetGpsCoordinateToWatch(turn_to);
-            //std::cout << "YOYOYOYO: " << *robot_gps_axis_to_watch << std::endl;
 
-            //is_movement_positive_ve = CheckIfMovementIsPositiveVE(turn_to);
             robot_forward_angle = RadianTo360Degree(imu->getRollPitchYaw()[2]);
 
             if (stop_move_first_iteration)
             {
-                if (robot_forward_angle <= 0.001)
-                {
-                    ResetDecisionVariables();
-                    continue;
-                }
+                //if (robot_forward_angle <= 0.001)
+                //{
+                //    std::cout << " SSSSSSSSSSSSSSSHEIT " << std::endl;
+                //    ResetDecisionVariables();
+                //    continue;
+                //}
 
                 SetGoal(turn_to, &x_coordinate_new, &z_coordinate_new, &target_distance);
                 
@@ -326,27 +327,15 @@ int main(int argc, char **argv)
 
                     std::cout << "Coords: " << "(" << x_coordinate_old << ", " << z_coordinate_old << ") (" << gps->getValues()[0] << ", " << gps->getValues()[2] << ")" << std::endl;
 
-                    //s1 = x_coordinate_old * -1;
-                    //s2 = z_coordinate_old * -1;
-
                     n1 = x_coordinate_new;
                     n2 = z_coordinate_new;
 
                     n1 += s1;
                     n2 += s2;
-                    //n1 *= -1;
-                    //n2 *= -1;
-                    //std::cout << s1 << " " << s2 << std::endl;
                 }
 
 
 
-                //std::cout << n1 << " " << n2 << std::endl;
-
-
-
-                //std::cout << (RadianTo360Degree(std::atan2(n2, n1) * 1)) << std::endl;
-                //std::cout << "Values: (" << gps->getValues()[0] << ", " << gps->getValues()[1] << ", " << gps->getValues()[2] << ")" << " " << target_distance << std::endl;
                 std::string s;
                 switch (turn_to)
                 {
@@ -379,7 +368,6 @@ int main(int argc, char **argv)
 
             }
 
-            //std::cout << "hi: " << robot_forward_angle << " " << turn_to << std::endl;
             turn_direction = GetTurnDirection(robot_forward_angle, RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)));
             if (rotation_first_iteration)
             {
@@ -387,13 +375,10 @@ int main(int argc, char **argv)
                 rotation_first_iteration = false;
             }
 
-            //std::cout << "TURN: " << turn_direction << ", " << opposite_turn_direction << std::endl;
-
             RotateRobot(imu, turn_to, turn_direction, opposite_turn_direction);
             continue;
         }
 #pragma endregion
-        //std::cout << "YOYOYOYO: " << *robot_gps_axis_to_watch << std::endl;
 
 
 #pragma region Check Move Decision
@@ -425,7 +410,6 @@ int main(int argc, char **argv)
 
 #pragma region Movement
         /*                                                  MOVEMENT                                                                */    
-        eee++;
 
         /* Should set variable should_rotate to true at the end of the move */
         if (should_move)
@@ -433,21 +417,14 @@ int main(int argc, char **argv)
             Move();
             is_movement_positive_ve = CheckIfMovementIsPositiveVE(turn_to);
 
-            //if (is_movement_positive_ve) target_distance = *robot_gps_axis_to_watch + distance_to_travel_linear;
-            //else                         target_distance = *robot_gps_axis_to_watch - distance_to_travel_linear;
-
             should_move = false;
 
         }
         else
         {
 
-            if (eee % 500 == 0)
-                ;// std::cout << is_movement_positive_ve << " " << "Target: " << target_distance << ", Current: " << *robot_gps_axis_to_watch << std::endl;
+            // std::cout << is_movement_positive_ve << " " << "Target: " << target_distance << ", Current: " << *robot_gps_axis_to_watch << std::endl;
 
-            //if (std::fmod(target_distance, 0.01) < 0.006 && std::fmod(target_distance, 0.01) > 0.004) ddd = true;
-
-            //if (ddd) std::cout << "TOO INACCURATE." << std::endl;
             
             should_stop_moving = CheckIfReachedTarget(is_movement_positive_ve, robot_gps_axis_to_watch, target_distance);
 
@@ -499,39 +476,39 @@ void SetGoal(DirectionAngle turn_to, double* x_coordinate_new, double* z_coordin
     switch (turn_to)
     {
     case TopLeft:
-        *x_coordinate_new += distance_to_travel_linear;
-        *z_coordinate_new += distance_to_travel_linear;
+        *x_coordinate_new -= distance_to_travel_linear;
+        *z_coordinate_new -= distance_to_travel_linear;
         *target_distance = *x_coordinate_new;
         break;
     case TopCenter:
-        *z_coordinate_new += distance_to_travel_linear;
+        *z_coordinate_new -= distance_to_travel_linear;
         *target_distance = *z_coordinate_new;
         break;
     case TopRight:
+        *x_coordinate_new += distance_to_travel_linear;
+        *z_coordinate_new -= distance_to_travel_linear;
+        *target_distance = *x_coordinate_new;
+        break;
+    case MiddleLeft:
+        *x_coordinate_new -= distance_to_travel_linear;
+        *target_distance = *x_coordinate_new;
+        break;
+    case MiddleRight:
+        *x_coordinate_new += distance_to_travel_linear;
+        *target_distance = *x_coordinate_new;
+        break;
+    case BottomLeft:
         *x_coordinate_new -= distance_to_travel_linear;
         *z_coordinate_new += distance_to_travel_linear;
         *target_distance = *x_coordinate_new;
         break;
-    case MiddleLeft:
-        *x_coordinate_new += distance_to_travel_linear;
-        *target_distance = *x_coordinate_new;
-        break;
-    case MiddleRight:
-        *x_coordinate_new -= distance_to_travel_linear;
-        *target_distance = *x_coordinate_new;
-        break;
-    case BottomLeft:
-        *x_coordinate_new += distance_to_travel_linear;
-        *z_coordinate_new -= distance_to_travel_linear;
-        *target_distance = *x_coordinate_new;
-        break;
     case BottomCenter:
-        *z_coordinate_new -= distance_to_travel_linear;
+        *z_coordinate_new += distance_to_travel_linear;
         *target_distance = *z_coordinate_new;
         break;
     case BottomRight:
-        *x_coordinate_new -= distance_to_travel_linear;
-        *z_coordinate_new -= distance_to_travel_linear;
+        *x_coordinate_new += distance_to_travel_linear;
+        *z_coordinate_new += distance_to_travel_linear;
         *target_distance = *x_coordinate_new;
         break;
     }
@@ -547,24 +524,13 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<float>*q_table, int* 
     else
         turn_to = ExploitEnvironment(q_table, current_position);
 
+    //turn_to = TopCenter;
+
     UpdatePosition(turn_to, new_position);
 
     return turn_to;
-
-    //std::cout << "New Position: " << new_position[0] << ", " << new_position[1] << std::endl;
 }
 
-int GetAxisOfMovementToWatch(DirectionAngle direction)
-{
-    switch (direction)
-    {
-    case TopCenter:
-    case BottomCenter:
-        return 1;
-    default:
-        return 0;
-    }
-}
 /* Converts radians to degrees, also converts the -180 to 180 range to 360 to 0 */
 float RadianTo360Degree(double radian)
 {
@@ -648,9 +614,9 @@ bool CheckIfMovementIsPositiveVE(DirectionAngle direction)
     case MiddleRight:
     case BottomRight:
     case BottomCenter:
-        return false;
-    default:
         return true;
+    default:
+        return false;
     }
 }
 
@@ -689,20 +655,6 @@ const double* GetGpsCoordinateToWatch(DirectionAngle facing_direction)
         return &(gps->getValues()[2]);
     default:
         return &(gps->getValues()[0]);
-    }
-}
-
-bool CheckIfMovingDiagonally()
-{
-    switch (previous_direction)
-    {
-    case TopLeft:
-    case TopRight:
-    case BottomLeft:
-    case BottomRight:
-        return true;
-    default:
-        return false;
     }
 }
 
@@ -815,8 +767,6 @@ DirectionAngle ChooseRandomMove()
 {
     int move_index = rand() % AMOUNT_OF_MOVES;
     
-    //std::cout << "Chose: " << move_index << std::endl;
-
     switch (move_index)
     {
     case 1:
@@ -836,7 +786,7 @@ DirectionAngle ChooseRandomMove()
     case 8:
         return BottomRight;
     default:
-        return TopCenter;
+        return INVALID;
     }
 }
 
@@ -867,8 +817,6 @@ DirectionAngle ExploitEnvironment(Array2D<float>* q_table, int* position)
         return BottomCenter;
     case 8:
         return BottomRight;
-    default:
-        return TopCenter;
     }
 }
 
