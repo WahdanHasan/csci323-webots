@@ -57,6 +57,7 @@ enum DirectionAngle
     BottomRight,
     INVALID,
 };
+
 //enum DirectionAngle
 //{
 //    TopRight = 135,
@@ -222,8 +223,8 @@ int main(int argc, char **argv)
     //map_row_size = (NUMBER_OF_SUBDIVISIONS * tile_row_count) - (tile_row_count - 1);
     //map_column_size = (NUMBER_OF_SUBDIVISIONS * tile_column_count) - (tile_column_count - 1);
 
-    map_row_size = (tile_row_count * NUMBER_OF_SUBDIVISIONS) - 1;
-    map_column_size = (tile_column_count * NUMBER_OF_SUBDIVISIONS) - 1;
+    map_row_size = (tile_row_count * NUMBER_OF_SUBDIVISIONS) + 1;
+    map_column_size = (tile_column_count * NUMBER_OF_SUBDIVISIONS) + 1;
     
     /* Initialize q-table */
     q_table.row_count = map_row_size * map_column_size;
@@ -337,6 +338,7 @@ int main(int argc, char **argv)
             average /= current_episode;
 
             std::cout << "Average for episode: " << average << "            Hit the wall " << numba_of_taim << " times." << std::endl;
+            std::cout << "Exploration rate is now at: " << exploration_rate << std::endl;
 
             current_episode_reward = 0.0;
 
@@ -419,7 +421,7 @@ int main(int argc, char **argv)
                         break;
                     }
 
-                    //std::cout << "MOVEMENT DIRECTION: " << s << "          MOVEMENT IJ: (" << current_position[0] << ", " << current_position[1] << ")      (" << new_position[0] << ", " << new_position[1] << ")" << std::endl;
+                    //std::cout << "MOVEMENT DIRECTION: " << s << "          CURRENT POS: (" << current_position[0] << ", " << current_position[1] << ")     NEW POS: (" << new_position[0] << ", " << new_position[1] << ")" << std::endl;
                 }
 
 
@@ -515,20 +517,54 @@ int main(int argc, char **argv)
 void UpdateNewPositionScore(Array2D<double>* q_table, DirectionAngle direction, int* current_position, double* current_episode_reward, double reward)
 {
     int action = GetDirectionIndex(direction);
-    int state = (map_row_size * current_position[0]) + action;
+    int state = (map_row_size * current_position[0]) + current_position[1];
 
     *current_episode_reward += reward;
 
-    int best_action_index = (int)GetStateBestDirectionAngle(q_table, current_position);
+    DirectionAngle best_direction = GetStateBestDirectionAngle(q_table, current_position);
+
+    int best_action_index = GetDirectionIndex(best_direction);
 
     //std::cout << "State-Action: (" << state << ", " << action << ") " << map_row_size << " " << current_position[0] << std::endl;
 
     q_table->array[state][action] = (1 - LEARNING_RATE) * q_table->array[state][action] 
         + LEARNING_RATE * (reward + DISCOUNT_RATE * q_table->array[state][best_action_index]);
 
-    std::cout << "Bellmond boi: " << q_table->array[state][action] << std::endl;
+    std::string s;
+    switch (action)
+    {
+    case TopLeft:
+        s = "TOP LEFT";
+        break;
+    case TopCenter:
+        s = "TOP CENTER";
+        break;
+    case TopRight:
+        s = "TOP RIGHT";
+        break;
+    case MiddleLeft:
+        s = "MIDDLE LEFT";
+        break;
+    case MiddleRight:
+        s = "MIDDLE RIGHT";
+        break;
+    case BottomLeft:
+        s = "BOTTOM LEFT";
+        break;
+    case BottomCenter:
+        s = "BOTTOM CENTER";
+        break;
+    case BottomRight:
+        s = "BOTTOM RIGHT";
+        break;
+    }
+
+    std::cout << "Ran into wall at State-Action (" << state << ", " << action << ") and updated it to " << q_table->array[state][action] << " points" << std::endl;
+
+    //std::cout << "Bellmond boi: " << q_table->array[state][action] << std::endl;
 }
 
+/* Returns the index position of a direction */
 int GetDirectionIndex(DirectionAngle direction)
 {
     switch (direction)
@@ -608,6 +644,42 @@ void SetGoalPosition(DirectionAngle turn_to, double* x_coordinate_new, double* z
     }
 }
 
+/* Updates the (i, j) values of the robot in matrix space */
+void UpdatePosition(DirectionAngle direction, int* position)
+{
+    switch (direction)
+    {
+    case TopLeft:
+        position[0] -= 1;
+        position[1] -= 1;
+        break;
+    case TopCenter:
+        position[0] -= 1;
+        break;
+    case TopRight:
+        position[0] -= 1;
+        position[1] += 1;
+        break;
+    case MiddleLeft:
+        position[1] -= 1;
+        break;
+    case MiddleRight:
+        position[1] += 1;
+        break;
+    case BottomLeft:
+        position[0] += 1;
+        position[1] -= 1;
+        break;
+    case BottomCenter:
+        position[0] += 1;
+        break;
+    case BottomRight:
+        position[0] += 1;
+        position[1] += 1;
+        break;
+    }
+}
+
 /* Decides the next move based on exploration-exploitation */
 DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int* current_position, int* new_position)
 {
@@ -619,7 +691,7 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int*
     else
         turn_to = GetStateBestDirectionAngle(q_table, current_position);
 
-    turn_to = TopCenter;
+    //turn_to = BottomLeft;
 
     UpdatePosition(turn_to, new_position);
 
@@ -883,10 +955,42 @@ DirectionAngle ChooseRandomMove()
 DirectionAngle GetStateBestDirectionAngle(Array2D<double>* q_table, int* position)
 {
     int best_index = 0;
+    int state = (map_row_size * position[0]) + position[1];
     for (int j = 0; j < q_table->column_count; j++)
     {
-        if (q_table->array[position[0]][j] > q_table->array[position[0]][best_index]) best_index = j;
+        if (q_table->array[state][j] > q_table->array[state][best_index]) best_index = j;
     }
+
+    std::string s;
+    switch (best_index)
+    {
+    case TopLeft:
+        s = "TOP LEFT";
+        break;
+    case TopCenter:
+        s = "TOP CENTER";
+        break;
+    case TopRight:
+        s = "TOP RIGHT";
+        break;
+    case MiddleLeft:
+        s = "MIDDLE LEFT";
+        break;
+    case MiddleRight:
+        s = "MIDDLE RIGHT";
+        break;
+    case BottomLeft:
+        s = "BOTTOM LEFT";
+        break;
+    case BottomCenter:
+        s = "BOTTOM CENTER";
+        break;
+    case BottomRight:
+        s = "BOTTOM RIGHT";
+        break;
+    }
+    std::cout << "BEST MOVE: " << s << " at " << q_table->array[state][best_index] << " points. (" << state << ", " << best_index << ")" << std::endl;
+    std::cout << "Chosen State-action (" << (map_row_size * position[0]) + position[1] << ", " << best_index << ")" << std::endl;
 
     switch (best_index)
     {
@@ -909,41 +1013,7 @@ DirectionAngle GetStateBestDirectionAngle(Array2D<double>* q_table, int* positio
     }
 }
 
-/* Updates the (i, j) values of the robot in matrix space */
-void UpdatePosition(DirectionAngle direction, int* position)
-{
-    switch (direction)
-    {
-    case TopLeft:
-        position[0] -= 1;
-        position[1] -= 1;
-        break;
-    case TopCenter:
-        position[0] -= 1;
-        break;
-    case TopRight:
-        position[0] -= 1;
-        position[1] += 1;
-        break;
-    case MiddleLeft:
-        position[1] -= 1;
-        break;
-    case MiddleRight:
-        position[1] += 1;
-        break;
-    case BottomLeft:
-        position[0] += 1;
-        position[1] -= 1;
-        break;
-    case BottomCenter:
-        position[0] += 1;
-        break;
-    case BottomRight:
-        position[0] += 1;
-        position[1] += 1;
-        break;
-    }
-}
+
 
 /* Cleans up all heap initialized memory */
 void CleanUp()
