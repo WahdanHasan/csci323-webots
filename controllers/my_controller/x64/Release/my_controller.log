@@ -12,7 +12,7 @@ c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_control
 c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(556): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
 c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(723): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
 c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(751): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(899): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(908): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
   Generating code
   1 of 646 functions ( 0.2%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation

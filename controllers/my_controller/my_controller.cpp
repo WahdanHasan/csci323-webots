@@ -457,7 +457,7 @@ int main(int argc, char **argv)
 
                 if (is_on_dirt)
                 {
-                    exploration_rate = MAX_EXPLORATION_RATE;
+                    //exploration_rate = MAX_EXPLORATION_RATE;
                     HideDirt(x_coordinate_new, z_coordinate_new);
                     UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_DIRT);
                 }
@@ -871,6 +871,15 @@ DirectionAngle ChooseRandomMove()
 {
     int move_index = rand() % AMOUNT_OF_MOVES;
     
+    //if (move_index == 0)
+    //    move_index = 1;
+    //else if (move_index == 1)
+    //    move_index = 3;
+    //else if (move_index == 2)
+    //    move_index = 4;
+    //else if (move_index == 3)
+    //    move_index = 6;
+
     switch (move_index)
     {
     case 0:
@@ -895,12 +904,21 @@ DirectionAngle ChooseRandomMove()
 /* Chooses the best action based on the current state */
 DirectionAngle GetStateBestDirectionAngle(Array2D<double>* q_table, int* position)
 {
-    int best_index = 0;
+    int best_index = 1;
     int state = (map_row_size * position[0]) + position[1];
     for (int j = 0; j < q_table->column_count; j++)
     {
         if (q_table->array[state][j] > q_table->array[state][best_index]) best_index = j;
     }
+
+    //if ((q_table->array[state][1] > q_table->array[state][best_index]))
+    //    best_index = 1;
+    //if ((q_table->array[state][3] > q_table->array[state][best_index]))
+    //    best_index = 3;
+    //if ((q_table->array[state][4] > q_table->array[state][best_index]))
+    //    best_index = 4;
+    //if ((q_table->array[state][6] > q_table->array[state][best_index]))
+    //    best_index = 6;
 
     switch (best_index)
     {

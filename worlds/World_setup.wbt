@@ -8,8 +8,8 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation -0.0841668867440388 -0.9699978106374648 -0.22807933386070117 2.3897865588417124
-  position -3.3249664918745445 2.1837993283077144 -3.5482092403021332
+  orientation -0.08604998908760936 -0.9709408954658503 -0.22331407678423437 2.359821248106764
+  position -3.4261065835461206 2.144618476647734 -3.4839460157211004
 }
 TexturedBackground {
 }
@@ -67,22 +67,22 @@ DEF Khepera Khepera1 {
   ]
 }
 Wall {
-  translation -0.6 0 -0.5
+  translation -0.6 -1 -0.5
   size 0.28 0.1 1.08
 }
 Wall {
-  translation 0.6 0 0.5
+  translation 0.6 -1 0.5
   name "wall(1)"
   size 0.28 0.1 1.08
 }
 Wall {
-  translation 0.5 0 -0.9
+  translation 0.5 -1 -0.9
   rotation 0 1 0 -1.5707953071795862
   name "wall(3)"
   size 0.25 0.1 1.08
 }
 Wall {
-  translation -0.9 0 0.6
+  translation -0.9 -1 0.6
   rotation 0 1 0 1.5708
   name "wall(2)"
   size 0.28 0.1 1.08
@@ -160,7 +160,6 @@ DEF DirtContainer Group {
         Shape {
           appearance PBRAppearance {
             baseColor 1 1 0
-            transparency 1
             metalness 0
           }
           geometry Cylinder {
