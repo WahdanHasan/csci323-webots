@@ -1,19 +1,19 @@
 ﻿  my_controller.cpp
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(227): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(247): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(344): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(431): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(191): warning C4101: 'average': unreferenced local variable
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(205): warning C4101: 'explore_probability': unreferenced local variable
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(196): warning C4101: 'axis_to_watch': unreferenced local variable
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(178): warning C4101: 'laser_sensor_distance': unreferenced local variable
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(537): warning C4101: 'dirt_z': unreferenced local variable
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(536): warning C4101: 'dirt_x': unreferenced local variable
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(587): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(772): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(1027): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(229): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(245): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(336): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(455): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(193): warning C4101: 'average': unreferenced local variable
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(207): warning C4101: 'explore_probability': unreferenced local variable
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(198): warning C4101: 'axis_to_watch': unreferenced local variable
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(180): warning C4101: 'laser_sensor_distance': unreferenced local variable
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(566): warning C4101: 'dirt_z': unreferenced local variable
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(565): warning C4101: 'dirt_x': unreferenced local variable
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(619): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(807): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+c:\users\wahda\desktop\stuff\csci323_projec\controllers\my_controller\my_controller.cpp(1062): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
   Generating code
-  2 of 649 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
+  3 of 649 functions ( 0.5%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
     0 functions had inline decision re-evaluated but remain unchanged
   Finished generating code

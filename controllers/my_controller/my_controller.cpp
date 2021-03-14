@@ -157,7 +157,7 @@ bool next_episode;
 double map_row_size;
 double map_column_size;
 double** dirt_positions;
-
+bool first_step = false;
 #pragma endregion
 
 
@@ -169,7 +169,7 @@ int main(int argc, char **argv)
 #pragma region Local Variable Declarations
     DirectionAngle turn_to;
     TurnDirection turn_direction;
-    TurnDirection opposite_turn_direction;
+    TurnDirection opposite_turn_direction = Clockwise;
     InertialUnit* imu;
     Node* arena;
 
@@ -238,10 +238,6 @@ int main(int argc, char **argv)
     tile_row_count = NUMBER_OF_TILES_PER_METER * arena_row_size;
     tile_column_count = NUMBER_OF_TILES_PER_METER * arena_column_size;
 
-    /* Initialize map row and column size */
-    //map_row_size = (NUMBER_OF_SUBDIVISIONS * tile_row_count) - (tile_row_count - 1);
-    //map_column_size = (NUMBER_OF_SUBDIVISIONS * tile_column_count) - (tile_column_count - 1);
-
     map_row_size = (tile_row_count * NUMBER_OF_SUBDIVISIONS) + 1;
     map_column_size = (tile_column_count * NUMBER_OF_SUBDIVISIONS) + 1;
     
@@ -276,12 +272,6 @@ int main(int argc, char **argv)
         dirt_positions[i][1] = robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("translation")->getSFVec3f()[2];
     }
 
-    for (int i = 0; i < amount_of_dirt; i++)
-    {
-        std::cout << "Dirt " << i + 1 << " position (" << dirt_positions[i][0] << ", " << dirt_positions[i][1] << ")" << std::endl;
-    }
-
-    //std::cout << "HEHEHEHE: " <<robot->getFromDef("DirtContainer")->getField("children")->getMFNode(0)->getField("translation")->getSFVec3f()[2] << std::endl;
 #pragma endregion
 
 
@@ -380,14 +370,15 @@ int main(int argc, char **argv)
             //std::cout << "Exploration rate is now at: " << exploration_rate << std::endl;
 
             //current_episode_reward = 0.0;
+            current_position[0] = start_position_row;
+            current_position[1] = start_position_column;
 
+            x_coordinate_old = 0.0;
+            z_coordinate_old = 0.0;
+
+            std::cout << "next.."<< std::endl;
             ResetEnvironment(); /* Move to next episode */
 
-            //current_position[0] = start_position_row;
-            //current_position[1] = start_position_column;
-
-            //x_coordinate_old = 0.0;
-            //z_coordinate_old = 0.0;
         }
 #pragma endregion
 
@@ -403,6 +394,8 @@ int main(int argc, char **argv)
             new_position[1] = current_position[1];
 
             turn_to = DecideMove(exploration_rate, &q_table, current_position, new_position);
+
+            //std::cout << "Rotating.." << std::endl;
         }
 
         /* Begin rotation here */
@@ -428,12 +421,43 @@ int main(int argc, char **argv)
                     n1 += s1;
                     n2 += s2;
                 }
+                std::string s;
+                switch (turn_to)
+                {
+                case TopLeft:
+                    s = "TOP LEFT";
+                    break;
+                case TopCenter:
+                    s = "TOP CENTER";
+                    break;
+                case TopRight:
+                    s = "TOP RIGHT";
+                    break;
+                case MiddleLeft:
+                    s = "MIDDLE LEFT";
+                    break;
+                case MiddleRight:
+                    s = "MIDDLE RIGHT";
+                    break;
+                case BottomLeft:
+                    s = "BOTTOM LEFT";
+                    break;
+                case BottomCenter:
+                    s = "BOTTOM CENTER";
+                    break;
+                case BottomRight:
+                    s = "BOTTOM RIGHT";
+                    break;
+                }
+                std::cout << "CHOSE TO MOVE: " << s << std::endl;
             }
 
             turn_direction = GetTurnDirection(robot_forward_angle, RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)));
 
+
             if (rotation_first_iteration)
             {
+            //std::cout << "They same.. " << robot_forward_angle << "     " << RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)) << std::endl;
                 opposite_turn_direction = (TurnDirection)(turn_direction * -1);
                 rotation_first_iteration = false;
             }
@@ -453,7 +477,7 @@ int main(int argc, char **argv)
         {
             battery -= BATTERY_LOST_PER_MOVE;
 
-            std::cout << "Battery left: " << battery << std::endl;
+            //std::cout << "Battery left: " << battery << std::endl;
 
             is_path_obstructed = IsFacingObstacle(laser_sensors, laser_sensor_count);
 
@@ -474,6 +498,9 @@ int main(int argc, char **argv)
 
         if (should_move)
         {
+            first_step = false;
+            //std::cout << "Done rotating.." << std::endl;
+            //std::cout << "They same..2   " << robot_forward_angle << "     " << RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)) << std::endl;
             Move();
             is_movement_positive_ve = CheckIfMovementIsPositiveVE(turn_to);
 
@@ -551,7 +578,6 @@ void HideDirt(double x_coordinate, double z_coordinate)
 /* Resets the environment to its default state */
 void ResetEnvironment()
 {
-    std::this_thread::sleep_for(sleep)
     /* Reset Robot */
     robot->getFromDef("Khepera")->getField("translation")->setSFVec3f(ROBOT_DEFAULT_POSITION);
     robot->getFromDef("Khepera")->getField("rotation")->setSFRotation(ROBOT_DEFAULT_ROTATION);
@@ -563,7 +589,10 @@ void ResetEnvironment()
     ResetDecisionVariables();
 
     next_episode = false;
+    //std::this_thread::sleep_for(std::chrono::seconds(1));
 
+    first_step = true;
+    previous_direction = TopCenter;
 }
 
 /* Resets the transparency of all of the dirts */
@@ -756,13 +785,16 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int*
     DirectionAngle turn_to;
     int explore_probability = rand() % 100;
 
-    //if (explore_probability <= exploration_rate)
+    if (explore_probability <= exploration_rate)
         turn_to = ChooseRandomMove();
-    //else
-    //    turn_to = GetStateBestDirectionAngle(q_table, current_position);
+    else
+        turn_to = GetStateBestDirectionAngle(q_table, current_position);
 
-    //turn_to = TopCenter;
-
+    if (first_step)
+    {
+        std::cout << "Chose top center..." << std::endl;;
+        turn_to = TopCenter;
+    }
     UpdatePosition(turn_to, new_position);
 
     return turn_to;
@@ -784,11 +816,11 @@ float RadianTo360Degree(double radian)
 void RotateRobot(InertialUnit* imu, DirectionAngle robot_forward_angle_delta, TurnDirection turn_direction, TurnDirection opposite_turn_direciton)
 {
     ///* Returns if the current facing direction is the direction to rotate towards */
-    //if (previous_direction == robot_forward_angle_delta)
-    //{
-    //    should_rotate = false;
-    //    return;
-    //}
+    if (previous_direction == robot_forward_angle_delta)
+    {
+        should_rotate = false;
+        return;
+    }
 
     /* If the direction to move towards flips sides, it means that the robot has reached the threshold of
        or surpassed how much it should turn. This stops the rotation */
