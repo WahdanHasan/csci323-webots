@@ -91,6 +91,8 @@ const double DIRT_TRANSPARENCY_DEFAULT = 0.0;
 const double DIRT_TRANSPARENCY_PICKED = 1.0;
 const double ROBOT_DEFAULT_POSITION[] = { 0.0, 0.0, 0.0 };
 const double ROBOT_DEFAULT_ROTATION[] = { 0.0, 1.0, 0.0, 0.0 };
+const double INDICATOR_EXPLORING[] = { 0.0, 1.0, 0.0 };
+const double INDICATOR_EXPLOITING[] = { 1.0, 0.0, 0.0 };
 #pragma endregion
 
 #pragma region Q-Learning Constants
@@ -113,6 +115,7 @@ GPS* gps;
 Motor* left_motor;
 Motor* right_motor;
 Node** dirts;
+Field* indicator;
 DirectionAngle previous_direction;
 
 double distance_to_travel_linear;
@@ -282,6 +285,8 @@ int main(int argc, char **argv)
     current_position[0] = start_position_row;
     current_position[1] = start_position_column;
 
+    /* Get Indicator reference */
+    indicator = robot->getFromDef("Indicator")->getField("children")->getMFNode(0)->getField("appearance")->getSFNode()->getField("baseColor");
 
     /* Variable initial values */
     x_coordinate_new = 0.0;
@@ -711,9 +716,15 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int*
     int explore_probability = rand() % 100;
 
     if (explore_probability <= exploration_rate)
+    {
         turn_to = ChooseRandomMove();
+        indicator->setSFColor(INDICATOR_EXPLORING);
+    }
     else
+    {
         turn_to = GetStateBestDirectionAngle(q_table, current_position);
+        indicator->setSFColor(INDICATOR_EXPLOITING);
+    }
 
     if (first_step)
         turn_to = TopCenter;

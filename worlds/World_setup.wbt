@@ -8,8 +8,8 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation -0.08042339571831797 -0.9568220180227615 -0.2793272332730651 2.551675726030129
-  position -3.2192934693529693 3.1726302545264886 -4.337814199419782
+  orientation -0.04570439307528359 -0.9878306129736514 -0.14866670281445105 2.452790837938921
+  position -2.5069691770415963 1.3684740622559268 -2.9636440481386033
 }
 TexturedBackground {
 }
@@ -298,6 +298,20 @@ DEF DirtContainer Group {
           }
         }
       ]
+    }
+  ]
+}
+DEF Indicator Transform {
+  translation 0 0.5 0
+  scale 0.3 0.3 0.3
+  children [
+    Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Sphere {
+        radius 0.1
+      }
     }
   ]
 }
