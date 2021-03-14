@@ -31,22 +31,7 @@ struct Array2D
 #pragma endregion
 
 #pragma region Enums
-/* When rotating Clockwise 
-    Right is 0 to -90
-    Behind is -90 to -180, then switches to 180
-    Left is 180 to 90
-    Front is 90 to 0
 
-*/
-
-/* 
-    Ive changed this so that clockwise rotation
-    is represented from 360 to 0 degrees.
-*/
-
-/*
-    I've become smarter and removed fixed angles altogether
-*/
 enum DirectionAngle
 {
     TopLeft,
@@ -57,20 +42,9 @@ enum DirectionAngle
     BottomLeft,
     BottomCenter,
     BottomRight,
-    INVALID,
 };
 
-//enum DirectionAngle
-//{
-//    TopRight = 135,
-//    MiddleRight = 90,
-//    BottomRight = 45,
-//    BottomCenter = 360,
-//    BottomLeft = 315,
-//    MiddleLeft = 270,
-//    TopLeft = 225,
-//    TopCenter = 180,
-//};
+
 
 enum TurnDirection
 {
@@ -80,7 +54,6 @@ enum TurnDirection
 #pragma endregion
 
 #pragma region Function Prototypes
-void CreateAdjacenyMatrix(Array2D<double>*, int, int);
 void RotateRobot(InertialUnit*, DirectionAngle, TurnDirection, TurnDirection);
 const double* GetGpsCoordinateToWatch(DirectionAngle);
 bool CheckIfReachedTarget(bool, const double*, double);
@@ -92,7 +65,6 @@ void Move();
 void SetUp();
 void CleanUp();
 void StopMove();
-void SetDirtPositions();
 bool IsFacingObstacle(DistanceSensor**, int laser_sensor_count);
 void SetGoalPosition(DirectionAngle, double*, double*, double*);
 DirectionAngle DecideMove(double, Array2D<double>*, int*, int*);
@@ -123,18 +95,16 @@ const double ROBOT_DEFAULT_ROTATION[] = { 0.0, 1.0, 0.0, 0.0 };
 
 #pragma region Q-Learning Constants
 const double MINIMUM_BATTERY_LEVEL = 0.0;
-const double BATTERY_START_LEVEL = 15.00;
+const double BATTERY_START_LEVEL = 100.00;
 const int AMOUNT_OF_MOVES = 8;
-const double EXPLORATION_RATE_DECAY_RATE = 0.00;
 const double BATTERY_LOST_PER_MOVE = 1.0;
 const double REWARD_OBSTRUCTION = -50.00;
-const double REWARD_EMPTY = -1;
-const double REWARD_DIRT = 10;
+const double REWARD_DIRT = 50;
 const double LEARNING_RATE = 0.1;
 const double DISCOUNT_RATE = 0.99;
 const double MINIMUM_EXPLORATION_RATE = 1.0;
 const double MAX_EXPLORATION_RATE = 100.0;
-const double EXPLORATION_DECAY_RATE = -1.0;
+const double EXPLORATION_DECAY_RATE = -0.5;
 #pragma endregion
 
 #pragma region Global Variable Declarations
@@ -153,7 +123,6 @@ bool should_rotate;
 bool should_move;
 bool stop_move_first_iteration;
 bool rotation_first_iteration;
-bool next_episode;
 double map_row_size;
 double map_column_size;
 double** dirt_positions;
@@ -340,7 +309,6 @@ int main(int argc, char **argv)
 #pragma endregion
 
 
-    next_episode = false;
 
     while ((robot->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
     {
@@ -348,28 +316,28 @@ int main(int argc, char **argv)
 
 #pragma region If End of Episode
         /* Move to next episode if max steps reached or battery runs out */
-        if (next_episode)
+        if (battery <=MINIMUM_BATTERY_LEVEL)
         {
-            //exploration_rate = MINIMUM_EXPLORATION_RATE + (MAX_EXPLORATION_RATE - MINIMUM_EXPLORATION_RATE) * exp(EXPLORATION_DECAY_RATE * current_episode);
+            exploration_rate = MINIMUM_EXPLORATION_RATE + (MAX_EXPLORATION_RATE - MINIMUM_EXPLORATION_RATE) * exp(EXPLORATION_DECAY_RATE * current_episode);
 
             battery = BATTERY_START_LEVEL;
 
-            //rewards_all_episodes[current_episode] = current_episode_reward;
-            //current_episode++;
+            rewards_all_episodes[current_episode] = current_episode_reward;
+            current_episode++;
 
-            //average = 0.0;
+            average = 0.0;
 
-            //for (int i = 0; i < current_episode; i++)
-            //{
-            //    average += rewards_all_episodes[i];
-            //}
+            for (int i = 0; i < current_episode; i++)
+            {
+                average += rewards_all_episodes[i];
+            }
 
-            //average /= current_episode;
+            average /= current_episode;
 
-            //std::cout << "Average for episode: " << average << std::endl;
-            //std::cout << "Exploration rate is now at: " << exploration_rate << std::endl;
+            std::cout << "Average for episode: " << average << std::endl;
+            std::cout << "Exploration rate is now at: " << exploration_rate << std::endl;
 
-            //current_episode_reward = 0.0;
+            current_episode_reward = 0.0;
             current_position[0] = start_position_row;
             current_position[1] = start_position_column;
 
@@ -394,8 +362,6 @@ int main(int argc, char **argv)
             new_position[1] = current_position[1];
 
             turn_to = DecideMove(exploration_rate, &q_table, current_position, new_position);
-
-            //std::cout << "Rotating.." << std::endl;
         }
 
         /* Begin rotation here */
@@ -421,35 +387,7 @@ int main(int argc, char **argv)
                     n1 += s1;
                     n2 += s2;
                 }
-                std::string s;
-                switch (turn_to)
-                {
-                case TopLeft:
-                    s = "TOP LEFT";
-                    break;
-                case TopCenter:
-                    s = "TOP CENTER";
-                    break;
-                case TopRight:
-                    s = "TOP RIGHT";
-                    break;
-                case MiddleLeft:
-                    s = "MIDDLE LEFT";
-                    break;
-                case MiddleRight:
-                    s = "MIDDLE RIGHT";
-                    break;
-                case BottomLeft:
-                    s = "BOTTOM LEFT";
-                    break;
-                case BottomCenter:
-                    s = "BOTTOM CENTER";
-                    break;
-                case BottomRight:
-                    s = "BOTTOM RIGHT";
-                    break;
-                }
-                std::cout << "CHOSE TO MOVE: " << s << std::endl;
+
             }
 
             turn_direction = GetTurnDirection(robot_forward_angle, RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)));
@@ -457,7 +395,6 @@ int main(int argc, char **argv)
 
             if (rotation_first_iteration)
             {
-            //std::cout << "They same.. " << robot_forward_angle << "     " << RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)) << std::endl;
                 opposite_turn_direction = (TurnDirection)(turn_direction * -1);
                 rotation_first_iteration = false;
             }
@@ -475,10 +412,6 @@ int main(int argc, char **argv)
 
         if (should_move)
         {
-            battery -= BATTERY_LOST_PER_MOVE;
-
-            //std::cout << "Battery left: " << battery << std::endl;
-
             is_path_obstructed = IsFacingObstacle(laser_sensors, laser_sensor_count);
 
             if (is_path_obstructed)
@@ -488,6 +421,8 @@ int main(int argc, char **argv)
                 ResetDecisionVariables();
                 continue;
             }
+
+
 
         }
 #pragma endregion
@@ -499,8 +434,6 @@ int main(int argc, char **argv)
         if (should_move)
         {
             first_step = false;
-            //std::cout << "Done rotating.." << std::endl;
-            //std::cout << "They same..2   " << robot_forward_angle << "     " << RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)) << std::endl;
             Move();
             is_movement_positive_ve = CheckIfMovementIsPositiveVE(turn_to);
 
@@ -520,6 +453,9 @@ int main(int argc, char **argv)
                     UpdateNewPositionScore(&q_table, turn_to, current_position, &current_episode_reward, REWARD_DIRT);
                 }
 
+                battery -= BATTERY_LOST_PER_MOVE;
+
+                std::cout << "Battery left: " << battery << std::endl;
 
                 current_position[0] = new_position[0];
                 current_position[1] = new_position[1];
@@ -528,9 +464,6 @@ int main(int argc, char **argv)
 
                 StopMove();
                 ResetDecisionVariables();
-
-                if ((abs(battery - MINIMUM_BATTERY_LEVEL) <= epsilon * abs(battery)))
-                    next_episode = true;
             }
 
         }
@@ -588,9 +521,6 @@ void ResetEnvironment()
 
     ResetDecisionVariables();
 
-    next_episode = false;
-    //std::this_thread::sleep_for(std::chrono::seconds(1));
-
     first_step = true;
     previous_direction = TopCenter;
 }
@@ -605,11 +535,6 @@ void ResetDirts()
         //robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("children")->
         //    getMFNode(0)->getField("appearance")->getSFNode()->getField("baseColor")->setSFColor(DIRT_DEFAULT_COLOR);
     }
-}
-
-void SetDirtPositions()
-{
-
 }
 
 /* Updates the q-value for the q-table and the current episode reward */
@@ -791,10 +716,8 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int*
         turn_to = GetStateBestDirectionAngle(q_table, current_position);
 
     if (first_step)
-    {
-        std::cout << "Chose top center..." << std::endl;;
         turn_to = TopCenter;
-    }
+    
     UpdatePosition(turn_to, new_position);
 
     return turn_to;
@@ -922,111 +845,6 @@ const double* GetGpsCoordinateToWatch(DirectionAngle facing_direction)
     }
 }
 
-/* Currently unused; to be removed if it remains so */
-void CreateAdjacenyMatrix(Array2D<double>* table, int map_row_count, int map_column_count)
-{
-    double** arr = table->array;
-    int row_count = table->row_count;
-    int column_count = table->column_count;
-
-    /* 
-        Below is the representation of the possible moves for the robot,
-        with 1 being possible, 0 being where the robot is, which is
-        not possible:
-
-        1 1 1
-        1 0 1
-        1 1 1
-    */
-
-    int from_state_number = 0;
-    int action_number = 0;
-    for (int i = 0; i < map_row_count; i++)
-    {
-        for (int j = 0; j < map_column_count; j++)
-        {
-            /* Check top-left */
-            if ((i - 1) != -1 && (j - 1) != -1)
-                arr[from_state_number][action_number] = 1;
-            else
-                arr[from_state_number][action_number] = -1;
-
-            action_number++;
-
-            /* Check top-center */
-            if ((i - 1) != -1)
-                arr[from_state_number][action_number] = 1;
-            else
-                arr[from_state_number][action_number] = -1;
-
-            action_number++;
-
-            /* Check top-right */
-            if ((i - 1) != -1 && (j + 1) != map_column_count)
-                arr[from_state_number][action_number] = 1;
-            else
-                arr[from_state_number][action_number] = -1;
-
-            action_number++;
-
-            /* Check middle-left */
-            if ((j - 1) != -1)
-                arr[from_state_number][action_number] = 1;
-            else
-                arr[from_state_number][action_number] = -1;
-
-            action_number++;
-
-            /* Set middle-center */
-            arr[from_state_number][action_number] = -1;
-
-            action_number++;
-
-            /* Check middle-right */
-            if ((j + 1) != map_column_count)
-                arr[from_state_number][action_number] = 1;
-            else
-                arr[from_state_number][action_number] = -1;
-
-            action_number++;
-
-            /* Check bottom-left */
-            if ((i + 1) != map_row_count && (j - 1) != -1)
-                arr[from_state_number][action_number] = 1;
-            else
-                arr[from_state_number][action_number] = -1;
-
-            action_number++;
-
-            /* Check bottom-center */
-            if ((i + 1) != map_row_count)
-                arr[from_state_number][action_number] = 1;
-            else
-                arr[from_state_number][action_number] = -1;
-
-            action_number++;
-
-            /* Check bottom-right */
-            if ((i + 1) != map_row_count && (j + 1) != map_column_count)
-                arr[from_state_number][action_number] = 1;
-            else
-                arr[from_state_number][action_number] = -1;
-
-            action_number = 0;
-            from_state_number++;
-        }
-    }
-    // (row_size * i) + j
-    for (int i = 0; i < row_count; i++)
-    {
-        for (int j = 0; j < column_count; j++)
-        {
-            std::cout << arr[i][j] << " ";
-        }
-        std::cout << std::endl;
-    }
-}
-
 /* Chooses a random direction to move in */
 DirectionAngle ChooseRandomMove()
 {
@@ -1050,8 +868,6 @@ DirectionAngle ChooseRandomMove()
         return BottomCenter;
     case 7:
         return BottomRight;
-    default:
-        return INVALID;
     }
 }
 
@@ -1064,37 +880,6 @@ DirectionAngle GetStateBestDirectionAngle(Array2D<double>* q_table, int* positio
     {
         if (q_table->array[state][j] > q_table->array[state][best_index]) best_index = j;
     }
-
-    std::string s;
-    switch (best_index)
-    {
-    case TopLeft:
-        s = "TOP LEFT";
-        break;
-    case TopCenter:
-        s = "TOP CENTER";
-        break;
-    case TopRight:
-        s = "TOP RIGHT";
-        break;
-    case MiddleLeft:
-        s = "MIDDLE LEFT";
-        break;
-    case MiddleRight:
-        s = "MIDDLE RIGHT";
-        break;
-    case BottomLeft:
-        s = "BOTTOM LEFT";
-        break;
-    case BottomCenter:
-        s = "BOTTOM CENTER";
-        break;
-    case BottomRight:
-        s = "BOTTOM RIGHT";
-        break;
-    }
-    std::cout << "BEST MOVE: " << s << " at " << q_table->array[state][best_index] << " points. (" << state << ", " << best_index << ")" << std::endl;
-    std::cout << "Chosen State-action (" << (map_row_size * position[0]) + position[1] << ", " << best_index << ")" << std::endl;
 
     switch (best_index)
     {
