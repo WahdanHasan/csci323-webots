@@ -12,6 +12,8 @@
 #include <webots/GPS.hpp>
 #include <iostream>
 #include <time.h>
+#include <thread>
+#include <chrono>
 #pragma endregion
 
 #define M_PI 3.14159265358979323846
@@ -90,6 +92,7 @@ void Move();
 void SetUp();
 void CleanUp();
 void StopMove();
+void SetDirtPositions();
 bool IsFacingObstacle(DistanceSensor**, int laser_sensor_count);
 void SetGoalPosition(DirectionAngle, double*, double*, double*);
 DirectionAngle DecideMove(double, Array2D<double>*, int*, int*);
@@ -98,6 +101,10 @@ DirectionAngle ChooseRandomMove();
 DirectionAngle GetStateBestDirectionAngle(Array2D<double>*, int*);
 void UpdateNewPositionScore(Array2D<double>*, DirectionAngle, int*, double*, double);
 int GetDirectionIndex(DirectionAngle);
+void ResetDirts();
+void ResetEnvironment();
+bool CheckForDirt(double, double);
+void HideDirt(double, double);
 #pragma endregion
 
 #pragma region Global Constants
@@ -107,13 +114,18 @@ const int NUMBER_OF_SUBDIVISIONS = 5;
 const double MOTOR_DEFAULT_SPEED = 10.0;
 const double MOTOR_STOP_SPEED = 0.0;
 const double DISTANCE_SENSOR_THRESHOLD = 1000.0;
+const double DIRT_DEFAULT_COLOR[] = { 1.0, 1.0, 0.0 };
+const double DIRT_TRANSPARENCY_DEFAULT = 0.0;
+const double DIRT_TRANSPARENCY_PICKED = 1.0;
+const double ROBOT_DEFAULT_POSITION[] = { 0.0, 0.0, 0.0 };
+const double ROBOT_DEFAULT_ROTATION[] = { 0.0, 1.0, 0.0, 0.0 };
 #pragma endregion
 
 #pragma region Q-Learning Constants
 const double MINIMUM_BATTERY_LEVEL = 0.0;
-const double BATTERY_START_LEVEL = 100.00;
+const double BATTERY_START_LEVEL = 15.00;
 const int AMOUNT_OF_MOVES = 8;
-const double EXPLORATION_RATE_DECAY_RATE = 0.01;
+const double EXPLORATION_RATE_DECAY_RATE = 0.00;
 const double BATTERY_LOST_PER_MOVE = 1.0;
 const double REWARD_OBSTRUCTION = -50.00;
 const double REWARD_EMPTY = -1;
@@ -130,23 +142,28 @@ Supervisor* robot;
 GPS* gps;
 Motor* left_motor;
 Motor* right_motor;
-
+Node** dirts;
 DirectionAngle previous_direction;
 
 double distance_to_travel_linear;
 
+int amount_of_dirt;
 int timeStep;
 bool should_rotate;
 bool should_move;
 bool stop_move_first_iteration;
 bool rotation_first_iteration;
+bool next_episode;
 double map_row_size;
 double map_column_size;
+double** dirt_positions;
+
 #pragma endregion
 
 
 int main(int argc, char **argv)
 {
+    static double epsilon = 0.001;
 
 
 #pragma region Local Variable Declarations
@@ -173,7 +190,9 @@ int main(int argc, char **argv)
     double arena_column_size;
     double tile_row_count;
     double tile_column_count;
+    double average;
     bool should_stop_moving;
+    bool is_on_dirt = false;
     bool is_path_obstructed;
     bool is_movement_positive_ve;
     int axis_to_watch;
@@ -238,6 +257,31 @@ int main(int argc, char **argv)
     for (int i = 0; i < q_table.row_count; i++)
         for (int j = 0; j < q_table.column_count; j++)
             q_table.array[i][j] = 0.0;
+
+    /* Get the amount of dirt */
+    amount_of_dirt = robot->getFromDef("DirtContainer")->getField("children")->getCount();
+
+    /* Initialize the dirt position array */
+    dirt_positions = new double* [amount_of_dirt];
+    for (int i = 0; i < amount_of_dirt; i++)
+    {
+        dirt_positions[i] = new double[2];
+    }
+    
+    /* Get Dirt locations */
+
+    for (int i = 0; i < amount_of_dirt; i++)
+    {
+        dirt_positions[i][0] = robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("translation")->getSFVec3f()[0];
+        dirt_positions[i][1] = robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("translation")->getSFVec3f()[2];
+    }
+
+    for (int i = 0; i < amount_of_dirt; i++)
+    {
+        std::cout << "Dirt " << i + 1 << " position (" << dirt_positions[i][0] << ", " << dirt_positions[i][1] << ")" << std::endl;
+    }
+
+    //std::cout << "HEHEHEHE: " <<robot->getFromDef("DirtContainer")->getField("children")->getMFNode(0)->getField("translation")->getSFVec3f()[2] << std::endl;
 #pragma endregion
 
 
@@ -286,12 +330,11 @@ int main(int argc, char **argv)
     x_coordinate_old = 0.0;
     z_coordinate_old = 0.0;
 
-    previous_direction = TopCenter;
-    turn_to = previous_direction;
+    //previous_direction = TopCenter;
+    //turn_to = previous_direction;
 
     should_rotate = true;
     rotation_first_iteration = true;
-    should_rotate = true;
     should_move = true;
     stop_move_first_iteration = true;
 
@@ -300,15 +343,14 @@ int main(int argc, char **argv)
         rewards_all_episodes[i] = 0.0;
     }
 
-
-
     srand(time(0));
 
     std::cout << "Map Size: " << map_row_size << ", " << map_column_size << std::endl;
     std::cout << "Rover Starting: " << current_position[0] << ", " << current_position[1] << std::endl;
 #pragma endregion
 
-    int numba_of_taim = 0;
+
+    next_episode = false;
 
     while ((robot->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
     {
@@ -316,33 +358,36 @@ int main(int argc, char **argv)
 
 #pragma region If End of Episode
         /* Move to next episode if max steps reached or battery runs out */
-        if (battery <= MINIMUM_BATTERY_LEVEL)
+        if (next_episode)
         {
-            exploration_rate = MINIMUM_EXPLORATION_RATE + (MAX_EXPLORATION_RATE - MINIMUM_EXPLORATION_RATE) * exp(EXPLORATION_DECAY_RATE * current_episode);
+            //exploration_rate = MINIMUM_EXPLORATION_RATE + (MAX_EXPLORATION_RATE - MINIMUM_EXPLORATION_RATE) * exp(EXPLORATION_DECAY_RATE * current_episode);
 
             battery = BATTERY_START_LEVEL;
 
-            rewards_all_episodes[current_episode] = current_episode_reward;
-            current_episode++;
+            //rewards_all_episodes[current_episode] = current_episode_reward;
+            //current_episode++;
 
-            ResetDecisionVariables();
+            //average = 0.0;
 
+            //for (int i = 0; i < current_episode; i++)
+            //{
+            //    average += rewards_all_episodes[i];
+            //}
 
-            double average = 0.0;
+            //average /= current_episode;
 
-            for (int i = 0; i < current_episode; i++)
-            {
-                average += rewards_all_episodes[i];
-            }
+            //std::cout << "Average for episode: " << average << std::endl;
+            //std::cout << "Exploration rate is now at: " << exploration_rate << std::endl;
 
-            average /= current_episode;
+            //current_episode_reward = 0.0;
 
-            std::cout << "Average for episode: " << average << "            Hit the wall " << numba_of_taim << " times." << std::endl;
-            std::cout << "Exploration rate is now at: " << exploration_rate << std::endl;
+            ResetEnvironment(); /* Move to next episode */
 
-            current_episode_reward = 0.0;
+            //current_position[0] = start_position_row;
+            //current_position[1] = start_position_column;
 
-            //ResetEnvironment(); /* Move to next episode */
+            //x_coordinate_old = 0.0;
+            //z_coordinate_old = 0.0;
         }
 #pragma endregion
 
@@ -358,12 +403,6 @@ int main(int argc, char **argv)
             new_position[1] = current_position[1];
 
             turn_to = DecideMove(exploration_rate, &q_table, current_position, new_position);
-
-            if (turn_to == INVALID)
-            {
-                ResetDecisionVariables();
-                continue;
-            }
         }
 
         /* Begin rotation here */
@@ -372,7 +411,6 @@ int main(int argc, char **argv)
             robot_gps_axis_to_watch = GetGpsCoordinateToWatch(turn_to);
 
             robot_forward_angle = RadianTo360Degree(imu->getRollPitchYaw()[2]);
-
             if (stop_move_first_iteration)
             {
                 SetGoalPosition(turn_to, &x_coordinate_new, &z_coordinate_new, &target_distance);
@@ -384,54 +422,16 @@ int main(int argc, char **argv)
                     s1 = gps->getValues()[0] * -1;
                     s2 = gps->getValues()[2] * -1;
 
-                    //std::cout << "Coords: " << "(" << x_coordinate_old << ", " << z_coordinate_old << ") (" << gps->getValues()[0] << ", " << gps->getValues()[2] << ")" << std::endl;
-
                     n1 = x_coordinate_new;
                     n2 = z_coordinate_new;
 
                     n1 += s1;
                     n2 += s2;
-
-                    std::string s;
-                    switch (turn_to)
-                    {
-                    case TopLeft:
-                        s = "TOP LEFT";
-                        break;
-                    case TopCenter:
-                        s = "TOP CENTER";
-                        break;
-                    case TopRight:
-                        s = "TOP RIGHT";
-                        break;
-                    case MiddleLeft:
-                        s = "MIDDLE LEFT";
-                        break;
-                    case MiddleRight:
-                        s = "MIDDLE RIGHT";
-                        break;
-                    case BottomLeft:
-                        s = "BOTTOM LEFT";
-                        break;
-                    case BottomCenter:
-                        s = "BOTTOM CENTER";
-                        break;
-                    case BottomRight:
-                        s = "BOTTOM RIGHT";
-                        break;
-                    }
-
-                    //std::cout << "MOVEMENT DIRECTION: " << s << "          CURRENT POS: (" << current_position[0] << ", " << current_position[1] << ")     NEW POS: (" << new_position[0] << ", " << new_position[1] << ")" << std::endl;
                 }
-
-
-
-
-                //std::cout << "(" << x_coordinate_new << ", " << z_coordinate_new << ") (" << n1 << ", " << n2 << "): " << RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)) << " " << robot_forward_angle << " " << s  << " " << target_distance << std::endl;
-
             }
 
             turn_direction = GetTurnDirection(robot_forward_angle, RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)));
+
             if (rotation_first_iteration)
             {
                 opposite_turn_direction = (TurnDirection)(turn_direction * -1);
@@ -459,11 +459,7 @@ int main(int argc, char **argv)
 
             if (is_path_obstructed)
             {
-
                 UpdateNewPositionScore(&q_table, turn_to, current_position, &current_episode_reward, REWARD_OBSTRUCTION);
-
-                //std::cout << "WHOOPS WALL " << std::endl;
-                numba_of_taim++;
 
                 ResetDecisionVariables();
                 continue;
@@ -476,10 +472,8 @@ int main(int argc, char **argv)
 #pragma region Movement
         /*                                                  MOVEMENT                                                                */
 
-        /* Should set variable should_rotate to true at the end of the move */
         if (should_move)
         {
-            //std::cout << "Current Position: (" << current_position[0] << ", " << current_position[1] << ")" << "   " << z_coordinate_old << std::endl;
             Move();
             is_movement_positive_ve = CheckIfMovementIsPositiveVE(turn_to);
 
@@ -487,20 +481,29 @@ int main(int argc, char **argv)
         }
         else
         {
-
-            // std::cout << is_movement_positive_ve << " " << "Target: " << target_distance << ", Current: " << *robot_gps_axis_to_watch << std::endl;
-
-
             should_stop_moving = CheckIfReachedTarget(is_movement_positive_ve, robot_gps_axis_to_watch, target_distance);
 
             if (should_stop_moving)
             {
+                is_on_dirt = CheckForDirt(x_coordinate_new, z_coordinate_new);
+
+                if (is_on_dirt)
+                {
+                    HideDirt(x_coordinate_new, z_coordinate_new);
+                    UpdateNewPositionScore(&q_table, turn_to, current_position, &current_episode_reward, REWARD_DIRT);
+                }
+
+
                 current_position[0] = new_position[0];
                 current_position[1] = new_position[1];
                 x_coordinate_old = x_coordinate_new;
                 z_coordinate_old = z_coordinate_new;
+
                 StopMove();
                 ResetDecisionVariables();
+
+                if ((abs(battery - MINIMUM_BATTERY_LEVEL) <= epsilon * abs(battery)))
+                    next_episode = true;
             }
 
         }
@@ -511,6 +514,73 @@ int main(int argc, char **argv)
 
     CleanUp();
     return 0;
+}
+
+/* Checks if the position has a dirt on it by comparing x and z coordinates */
+bool CheckForDirt(double x_coordinate, double z_coordinate)
+{
+    static double epsilon = 0.001;
+    
+    for (int i = 0; i < amount_of_dirt; i++)
+    {
+        //(dirt_positions[i][0]) == x_coordinate && (dirt_positions[i][1]) == z_coordinate
+        if ( (abs(dirt_positions[i][0] - x_coordinate) <= epsilon * abs(dirt_positions[i][0])) && (abs(dirt_positions[i][1] - z_coordinate) <= epsilon * abs(dirt_positions[i][1])))
+            return true;
+    }
+    return false;
+}
+
+/* Hides the dirt that matches the x and z coordinates provided */
+void HideDirt(double x_coordinate, double z_coordinate)
+{
+    static double epsilon = 0.001;
+
+    double dirt_x;
+    double dirt_z;
+    for (int i = 0; i < amount_of_dirt; i++)
+    {
+        if ((abs(dirt_positions[i][0] - x_coordinate) <= epsilon * abs(dirt_positions[i][0])) && (abs(dirt_positions[i][1] - z_coordinate) <= epsilon * abs(dirt_positions[i][1])))
+        {
+            robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("children")->
+                getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->setSFFloat(DIRT_TRANSPARENCY_PICKED);
+            return;
+        }
+    }
+}
+
+/* Resets the environment to its default state */
+void ResetEnvironment()
+{
+    std::this_thread::sleep_for(sleep)
+    /* Reset Robot */
+    robot->getFromDef("Khepera")->getField("translation")->setSFVec3f(ROBOT_DEFAULT_POSITION);
+    robot->getFromDef("Khepera")->getField("rotation")->setSFRotation(ROBOT_DEFAULT_ROTATION);
+
+
+    /* Reset Dirt visibility */
+    ResetDirts();
+
+    ResetDecisionVariables();
+
+    next_episode = false;
+
+}
+
+/* Resets the transparency of all of the dirts */
+void ResetDirts()
+{
+    for (int i = 0 ; i < amount_of_dirt ; i++)
+    {
+        robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("children")->
+            getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->setSFFloat(DIRT_TRANSPARENCY_DEFAULT);
+        //robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("children")->
+        //    getMFNode(0)->getField("appearance")->getSFNode()->getField("baseColor")->setSFColor(DIRT_DEFAULT_COLOR);
+    }
+}
+
+void SetDirtPositions()
+{
+
 }
 
 /* Updates the q-value for the q-table and the current episode reward */
@@ -686,12 +756,12 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int*
     DirectionAngle turn_to;
     int explore_probability = rand() % 100;
 
-    if (explore_probability <= exploration_rate)
+    //if (explore_probability <= exploration_rate)
         turn_to = ChooseRandomMove();
-    else
-        turn_to = GetStateBestDirectionAngle(q_table, current_position);
+    //else
+    //    turn_to = GetStateBestDirectionAngle(q_table, current_position);
 
-    //turn_to = BottomLeft;
+    //turn_to = TopCenter;
 
     UpdatePosition(turn_to, new_position);
 
@@ -713,12 +783,12 @@ float RadianTo360Degree(double radian)
 /* Rotates the robot to face the direction provided */
 void RotateRobot(InertialUnit* imu, DirectionAngle robot_forward_angle_delta, TurnDirection turn_direction, TurnDirection opposite_turn_direciton)
 {
-    /* Returns if the current facing direction is the direction to rotate towards */
-    if (previous_direction == robot_forward_angle_delta)
-    {
-        should_rotate = false;
-        return;
-    }
+    ///* Returns if the current facing direction is the direction to rotate towards */
+    //if (previous_direction == robot_forward_angle_delta)
+    //{
+    //    should_rotate = false;
+    //    return;
+    //}
 
     /* If the direction to move towards flips sides, it means that the robot has reached the threshold of
        or surpassed how much it should turn. This stops the rotation */
@@ -728,8 +798,10 @@ void RotateRobot(InertialUnit* imu, DirectionAngle robot_forward_angle_delta, Tu
         right_motor->setVelocity(0.0f);
         previous_direction = robot_forward_angle_delta;
         should_rotate = false;
+        //std::cout << "Done Rotating.." << std::endl;
         return;
     }
+
 
     /* Begins rotating either clockwise or anti-clockwise */
     left_motor->setVelocity(turn_direction * MOTOR_DEFAULT_SPEED);
@@ -1012,8 +1084,6 @@ DirectionAngle GetStateBestDirectionAngle(Array2D<double>* q_table, int* positio
         return BottomRight;
     }
 }
-
-
 
 /* Cleans up all heap initialized memory */
 void CleanUp()
