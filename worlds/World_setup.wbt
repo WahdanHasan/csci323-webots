@@ -8,8 +8,8 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation -0.04570439307528359 -0.9878306129736514 -0.14866670281445105 2.452790837938921
-  position -2.5069691770415963 1.3684740622559268 -2.9636440481386033
+  orientation -0.0841668867440388 -0.9699978106374648 -0.22807933386070117 2.3897865588417124
+  position -3.3249664918745445 2.1837993283077144 -3.5482092403021332
 }
 TexturedBackground {
 }
@@ -67,44 +67,28 @@ DEF Khepera Khepera1 {
   ]
 }
 Wall {
-  translation -0.7 0 -0.5
-  size 0.2 0.1 1
+  translation -0.6 0 -0.5
+  size 0.28 0.1 1.08
 }
 Wall {
-  translation 0.5 0 0.5
+  translation 0.6 0 0.5
   name "wall(1)"
-  size 0.2 0.1 1
+  size 0.28 0.1 1.08
 }
 Wall {
-  translation 0.7 0 -0.8
+  translation 0.5 0 -0.9
   rotation 0 1 0 -1.5707953071795862
   name "wall(3)"
-  size 0.2 0.1 1
+  size 0.25 0.1 1.08
 }
 Wall {
-  translation -0.9 0 0.7
+  translation -0.9 0 0.6
   rotation 0 1 0 1.5708
   name "wall(2)"
-  size 0.2 0.1 1
+  size 0.28 0.1 1.08
 }
 DEF DirtContainer Group {
   children [
-    Transform {
-      translation 0 0 -0.9
-      scale 0.3 0.1 0.3
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 1 1 0
-            metalness 0
-          }
-          geometry Cylinder {
-            height 0.1
-            radius 0.05
-          }
-        }
-      ]
-    }
     Transform {
       translation -0.1 0 0.6
       scale 0.3 0.1 0.3
@@ -112,7 +96,6 @@ DEF DirtContainer Group {
         Shape {
           appearance PBRAppearance {
             baseColor 1 1 0
-            transparency 1
             metalness 0
           }
           geometry Cylinder {
@@ -129,7 +112,6 @@ DEF DirtContainer Group {
         Shape {
           appearance PBRAppearance {
             baseColor 1 1 0
-            transparency 1
             metalness 0
           }
           geometry Cylinder {
@@ -307,6 +289,7 @@ DEF Indicator Transform {
   children [
     Shape {
       appearance PBRAppearance {
+        baseColor 1 0 0
         metalness 0
       }
       geometry Sphere {

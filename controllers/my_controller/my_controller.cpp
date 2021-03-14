@@ -71,7 +71,7 @@ DirectionAngle DecideMove(double, Array2D<double>*, int*, int*);
 void ResetDecisionVariables();
 DirectionAngle ChooseRandomMove();
 DirectionAngle GetStateBestDirectionAngle(Array2D<double>*, int*);
-void UpdateNewPositionScore(Array2D<double>*, DirectionAngle, int*, double*, double);
+void UpdateNewPositionScore(Array2D<double>*, DirectionAngle, int*, int*, double*, double);
 int GetDirectionIndex(DirectionAngle);
 void ResetDirts();
 void ResetEnvironment();
@@ -81,8 +81,8 @@ void HideDirt(double, double);
 
 #pragma region Global Constants
 const int NUMBER_OF_TILES_PER_METER = 2;
-const double SIZE_OF_TILE = 0.5;
 const int NUMBER_OF_SUBDIVISIONS = 5;
+const double SIZE_OF_TILE = 0.5;
 const double MOTOR_DEFAULT_SPEED = 10.0;
 const double MOTOR_STOP_SPEED = 0.0;
 const double DISTANCE_SENSOR_THRESHOLD = 1000.0;
@@ -96,17 +96,19 @@ const double INDICATOR_EXPLOITING[] = { 1.0, 0.0, 0.0 };
 #pragma endregion
 
 #pragma region Q-Learning Constants
+const int AMOUNT_OF_MOVES = 8;
+const double BOARD_BASE_SCORE = 0.0;
 const double MINIMUM_BATTERY_LEVEL = 0.0;
 const double BATTERY_START_LEVEL = 100.00;
-const int AMOUNT_OF_MOVES = 8;
 const double BATTERY_LOST_PER_MOVE = 1.0;
-const double REWARD_OBSTRUCTION = -50.00;
-const double REWARD_DIRT = 50;
+const double REWARD_OBSTRUCTION = -100.00;
+const double REWARD_EMPTY = -1.0;
+const double REWARD_DIRT = 100;
 const double LEARNING_RATE = 0.1;
 const double DISCOUNT_RATE = 0.99;
 const double MINIMUM_EXPLORATION_RATE = 1.0;
 const double MAX_EXPLORATION_RATE = 100.0;
-const double EXPLORATION_DECAY_RATE = -0.5;
+const double EXPLORATION_DECAY_RATE = -0.1;
 #pragma endregion
 
 #pragma region Global Variable Declarations
@@ -122,14 +124,15 @@ double distance_to_travel_linear;
 
 int amount_of_dirt;
 int timeStep;
+int amount_of_dirt_picked_up = 0;
 bool should_rotate;
 bool should_move;
 bool stop_move_first_iteration;
 bool rotation_first_iteration;
+bool first_step = false;
 double map_row_size;
 double map_column_size;
 double** dirt_positions;
-bool first_step = false;
 #pragma endregion
 
 
@@ -224,7 +227,7 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < q_table.row_count; i++)
         for (int j = 0; j < q_table.column_count; j++)
-            q_table.array[i][j] = 0.0;
+            q_table.array[i][j] = BOARD_BASE_SCORE;
 
     /* Get the amount of dirt */
     amount_of_dirt = robot->getFromDef("DirtContainer")->getField("children")->getCount();
@@ -321,7 +324,7 @@ int main(int argc, char **argv)
 
 #pragma region If End of Episode
         /* Move to next episode if max steps reached or battery runs out */
-        if (battery <=MINIMUM_BATTERY_LEVEL)
+        if ( (battery <= MINIMUM_BATTERY_LEVEL || amount_of_dirt_picked_up == amount_of_dirt) && should_move)
         {
             exploration_rate = MINIMUM_EXPLORATION_RATE + (MAX_EXPLORATION_RATE - MINIMUM_EXPLORATION_RATE) * exp(EXPLORATION_DECAY_RATE * current_episode);
 
@@ -351,8 +354,8 @@ int main(int argc, char **argv)
 
             std::cout << "next.."<< std::endl;
             ResetEnvironment(); /* Move to next episode */
-
         }
+
 #pragma endregion
 
 
@@ -417,11 +420,15 @@ int main(int argc, char **argv)
 
         if (should_move)
         {
+            battery -= BATTERY_LOST_PER_MOVE;
+
+            std::cout << "Battery left: " << battery << std::endl;
+
             is_path_obstructed = IsFacingObstacle(laser_sensors, laser_sensor_count);
 
             if (is_path_obstructed)
             {
-                UpdateNewPositionScore(&q_table, turn_to, current_position, &current_episode_reward, REWARD_OBSTRUCTION);
+                UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_OBSTRUCTION);
 
                 ResetDecisionVariables();
                 continue;
@@ -455,12 +462,12 @@ int main(int argc, char **argv)
                 if (is_on_dirt)
                 {
                     HideDirt(x_coordinate_new, z_coordinate_new);
-                    UpdateNewPositionScore(&q_table, turn_to, current_position, &current_episode_reward, REWARD_DIRT);
+                    UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_DIRT);
                 }
-
-                battery -= BATTERY_LOST_PER_MOVE;
-
-                std::cout << "Battery left: " << battery << std::endl;
+                else
+                {
+                    UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_EMPTY);
+                }
 
                 current_position[0] = new_position[0];
                 current_position[1] = new_position[1];
@@ -508,6 +515,7 @@ void HideDirt(double x_coordinate, double z_coordinate)
         {
             robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("children")->
                 getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->setSFFloat(DIRT_TRANSPARENCY_PICKED);
+            amount_of_dirt_picked_up++;
             return;
         }
     }
@@ -528,6 +536,7 @@ void ResetEnvironment()
 
     first_step = true;
     previous_direction = TopCenter;
+    amount_of_dirt_picked_up = 0;
 }
 
 /* Resets the transparency of all of the dirts */
@@ -543,21 +552,23 @@ void ResetDirts()
 }
 
 /* Updates the q-value for the q-table and the current episode reward */
-void UpdateNewPositionScore(Array2D<double>* q_table, DirectionAngle direction, int* current_position, double* current_episode_reward, double reward)
+void UpdateNewPositionScore(Array2D<double>* q_table, DirectionAngle direction, int* current_position, int* new_position, double* current_episode_reward, double reward)
 {
     int action = GetDirectionIndex(direction);
     int state = (map_row_size * current_position[0]) + current_position[1];
+    int new_state = (map_row_size * new_position[0]) + new_position[1];
 
     *current_episode_reward += reward;
 
-    DirectionAngle best_direction = GetStateBestDirectionAngle(q_table, current_position);
+    DirectionAngle best_direction = GetStateBestDirectionAngle(q_table, new_position);
 
-    int best_action_index = GetDirectionIndex(best_direction);
+    int new_pos_best_action_index = GetDirectionIndex(best_direction);
 
-    //std::cout << "State-Action: (" << state << ", " << action << ") " << map_row_size << " " << current_position[0] << std::endl;
+    //q_table->array[state][action] = (1 - LEARNING_RATE) * q_table->array[state][action] 
+    //    + LEARNING_RATE * (reward + DISCOUNT_RATE * q_table->array[state][best_action_index]);
 
-    q_table->array[state][action] = (1 - LEARNING_RATE) * q_table->array[state][action] 
-        + LEARNING_RATE * (reward + DISCOUNT_RATE * q_table->array[state][best_action_index]);
+    q_table->array[state][action] = q_table->array[state][action] + 
+        (LEARNING_RATE * (reward + (DISCOUNT_RATE * q_table->array[new_state][new_pos_best_action_index]) - q_table->array[state][action]));
 
     std::string s;
     switch (action)
@@ -712,6 +723,7 @@ void UpdatePosition(DirectionAngle direction, int* position)
 /* Decides the next move based on exploration-exploitation */
 DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int* current_position, int* new_position)
 {
+    static int epsilon = 0.001;
     DirectionAngle turn_to;
     int explore_probability = rand() % 100;
 
@@ -723,7 +735,16 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int*
     else
     {
         turn_to = GetStateBestDirectionAngle(q_table, current_position);
-        indicator->setSFColor(INDICATOR_EXPLOITING);
+        
+        int state = (map_row_size * current_position[0]) + current_position[1];
+
+        //if ((abs(BOARD_BASE_SCORE - q_table->array[state][GetDirectionIndex(turn_to)]) <= epsilon * abs(BOARD_BASE_SCORE)))
+        //{
+        //    turn_to = ChooseRandomMove();
+        //    indicator->setSFColor(INDICATOR_EXPLORING);
+        //}
+        //else
+            indicator->setSFColor(INDICATOR_EXPLOITING);
     }
 
     if (first_step)
