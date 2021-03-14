@@ -102,7 +102,7 @@ const double MINIMUM_BATTERY_LEVEL = 0.0;
 const double BATTERY_START_LEVEL = 100.00;
 const double BATTERY_LOST_PER_MOVE = 1.0;
 const double REWARD_OBSTRUCTION = -100.00;
-const double REWARD_EMPTY = -1.0;
+const double REWARD_EMPTY = -10.0;
 const double REWARD_DIRT = 100;
 const double LEARNING_RATE = 0.1;
 const double DISCOUNT_RATE = 0.99;
@@ -187,10 +187,6 @@ int main(int argc, char **argv)
     int current_position[2];
     int new_position[2];
     int current_episode = 0;
-    
-
-
-
 #pragma endregion
 
 
@@ -316,7 +312,7 @@ int main(int argc, char **argv)
     std::cout << "Rover Starting: " << current_position[0] << ", " << current_position[1] << std::endl;
 #pragma endregion
 
-
+    ResetDirts();
 
     while ((robot->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
     {
@@ -461,6 +457,7 @@ int main(int argc, char **argv)
 
                 if (is_on_dirt)
                 {
+                    exploration_rate = MAX_EXPLORATION_RATE;
                     HideDirt(x_coordinate_new, z_coordinate_new);
                     UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_DIRT);
                 }
@@ -735,16 +732,8 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int*
     else
     {
         turn_to = GetStateBestDirectionAngle(q_table, current_position);
-        
-        int state = (map_row_size * current_position[0]) + current_position[1];
 
-        //if ((abs(BOARD_BASE_SCORE - q_table->array[state][GetDirectionIndex(turn_to)]) <= epsilon * abs(BOARD_BASE_SCORE)))
-        //{
-        //    turn_to = ChooseRandomMove();
-        //    indicator->setSFColor(INDICATOR_EXPLORING);
-        //}
-        //else
-            indicator->setSFColor(INDICATOR_EXPLOITING);
+        indicator->setSFColor(INDICATOR_EXPLOITING);
     }
 
     if (first_step)

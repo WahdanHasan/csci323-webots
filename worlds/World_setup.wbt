@@ -160,6 +160,7 @@ DEF DirtContainer Group {
         Shape {
           appearance PBRAppearance {
             baseColor 1 1 0
+            transparency 1
             metalness 0
           }
           geometry Cylinder {
@@ -289,7 +290,7 @@ DEF Indicator Transform {
   children [
     Shape {
       appearance PBRAppearance {
-        baseColor 1 0 0
+        baseColor 0 1 0
         metalness 0
       }
       geometry Sphere {
