@@ -14,13 +14,14 @@
 #include <time.h>
 #include <thread>
 #include <chrono>
+#include <fstream>
 #pragma endregion
 
 #define M_PI 3.14159265358979323846
 
 using namespace webots;
 
-#pragma region Classes
+#pragma region Classes and Structs
 template<typename t>
 struct Array2D
 {
@@ -77,6 +78,9 @@ void ResetCoins();
 void ResetEnvironment();
 bool CheckForCoin(double, double);
 void HideCoin(double, double);
+bool LoadState(Array2D<double>*);
+void SaveState(Array2D<double>*);
+bool IsCoinPickedUp(double, double);
 #pragma endregion
 
 #pragma region Global Constants
@@ -107,7 +111,7 @@ const double LEARNING_RATE = 0.1;
 const double DISCOUNT_RATE = 0.99;
 const double MINIMUM_EXPLORATION_RATE = 1.0;
 const double MAX_EXPLORATION_RATE = 100.0;
-const double EXPLORATION_DECAY_RATE = -0.001;
+const double EXPLORATION_DECAY_RATE = -0.1;
 #pragma endregion
 
 #pragma region Global Variable Declarations
@@ -176,7 +180,7 @@ int main(int argc, char **argv)
     InertialUnit* imu;
     Node* arena;
     Array2D<double> q_table;
-    const int number_of_episodes = 100;
+    const int number_of_episodes = 10;
     double battery;
     double exploration_rate;
     double explore_probability;
@@ -220,10 +224,12 @@ int main(int argc, char **argv)
     q_table.array = new double* [q_table.row_count];
     for (int i = 0; i < q_table.row_count; i++)
         q_table.array[i] = new double[q_table.column_count];
-
-    for (int i = 0; i < q_table.row_count; i++)
-        for (int j = 0; j < q_table.column_count; j++)
-            q_table.array[i][j] = BOARD_BASE_SCORE;
+    if (!LoadState(&q_table))
+    {
+        for (int i = 0; i < q_table.row_count; i++)
+            for (int j = 0; j < q_table.column_count; j++)
+                q_table.array[i][j] = BOARD_BASE_SCORE;
+    }
 
     /* Get the amount of coin */
     amount_of_coin = environment->getFromDef("CoinContainer")->getField("children")->getCount();
@@ -481,6 +487,8 @@ int main(int argc, char **argv)
 
     }
 
+    SaveState(&q_table);
+
     CleanUp();
     return 0;
 }
@@ -494,8 +502,29 @@ bool CheckForCoin(double x_coordinate, double z_coordinate)
     {
         //(coin_positions[i][0]) == x_coordinate && (coin_positions[i][1]) == z_coordinate
         if ( (abs(coin_positions[i][0] - x_coordinate) <= epsilon * abs(coin_positions[i][0])) && (abs(coin_positions[i][1] - z_coordinate) <= epsilon * abs(coin_positions[i][1])))
-            return true;
+            if (IsCoinPickedUp(x_coordinate, z_coordinate))
+                return true;
     }
+    return false;
+}
+
+/* Checks if a coin has been picked up */
+bool IsCoinPickedUp(double x_coordinate, double z_coordinate)
+{
+    static double epsilon = 0.001;
+    for (int i = 0; i < amount_of_coin; i++)
+    {
+        if ((abs(coin_positions[i][0] - x_coordinate) <= epsilon * abs(coin_positions[i][0])) && (abs(coin_positions[i][1] - z_coordinate) <= epsilon * abs(coin_positions[i][1])))
+        {
+            double coin_transparency = environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("children")->
+                getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->getSFFloat();
+            if ((coin_transparency - COIN_TRANSPARENCY_PICKED) <= epsilon * abs(coin_transparency))
+            {
+                return true;
+            }
+        }
+    }
+    
     return false;
 }
 
@@ -735,6 +764,7 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int*
     {
         turn_to = GetStateBestDirectionAngle(q_table, current_position);
         indicator->setSFColor(INDICATOR_EXPLOITING_COLOR);
+
     }
 
     if (first_step)
@@ -940,6 +970,70 @@ DirectionAngle GetStateBestDirectionAngle(Array2D<double>* q_table, int* positio
     case 7:
         return BottomRight;
     }
+}
+
+/* Saves the current q_table */
+void SaveState(Array2D<double>* q_table)
+{
+    std::fstream out("Q-Table.txt", std::ios::out);
+
+    int states = q_table->row_count;
+    int actions = q_table->column_count;
+
+    out << states << " " << actions << "\n";
+
+    for (int i = 0; i < states; i++)
+    {
+        for (int j = 0; j < actions; j++)
+        {
+            out << q_table->array[i][j] << " ";
+        }
+        out << "\n";
+    }
+
+    out.close();
+
+    std::cout << "Successfully saved the current state of the q_table.. " << std::endl;
+}
+
+/* Loads the previous run q_table if exists */
+bool LoadState(Array2D<double>* q_table)
+{
+    std::fstream in("Q-Table.txt", std::ios::in);
+
+    if (!in)
+    {
+        std::cout << "No previous q_table found.. " << std::endl << "Creating new q_table.." << std::endl;
+        return false;
+    }
+
+    int states;
+    int actions;
+
+    in >> states;
+    in >> actions;
+
+    if (q_table->row_count != states || q_table->column_count != actions)
+    {
+        std::cout << "The current state-action (" << q_table->row_count << ", " << q_table->column_count <<
+            ") does not match the loaded table state-action (" << states << ", " << actions <<
+            ").. The program will create a new q_table and overwrite the old one upon successful exit.." << std::endl;
+        std::cout << "Kindly stop the execution of the program before a successful run has completed to prevent data overwritting.. " << std::endl;
+        return false;
+    }
+
+    for (int i = 0; i < states; i++)
+    {
+        for (int j = 0; j < actions; j++)
+        {
+            in >> q_table->array[i][j];
+        }
+    }
+
+    in.close();
+
+    std::cout << "Successfully loaded previous q_table information.. " << std::endl;
+    return true;
 }
 
 /* Cleans up all heap initialized memory */

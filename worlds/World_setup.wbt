@@ -192,7 +192,6 @@ DEF CoinContainer Group {
         Shape {
           appearance PBRAppearance {
             baseColor 1 1 0
-            transparency 1
             metalness 0
           }
           geometry Cylinder {
