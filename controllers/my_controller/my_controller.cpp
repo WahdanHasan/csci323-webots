@@ -73,10 +73,10 @@ DirectionAngle ChooseRandomMove();
 DirectionAngle GetStateBestDirectionAngle(Array2D<double>*, int*);
 void UpdateNewPositionScore(Array2D<double>*, DirectionAngle, int*, int*, double*, double);
 int GetDirectionIndex(DirectionAngle);
-void ResetDirts();
+void ResetCoins();
 void ResetEnvironment();
-bool CheckForDirt(double, double);
-void HideDirt(double, double);
+bool CheckForCoin(double, double);
+void HideCoin(double, double);
 #pragma endregion
 
 #pragma region Global Constants
@@ -86,13 +86,12 @@ const double SIZE_OF_TILE = 0.5;
 const double MOTOR_DEFAULT_SPEED = 10.0;
 const double MOTOR_STOP_SPEED = 0.0;
 const double DISTANCE_SENSOR_THRESHOLD = 1000.0;
-const double DIRT_DEFAULT_COLOR[] = { 1.0, 1.0, 0.0 };
-const double DIRT_TRANSPARENCY_DEFAULT = 0.0;
-const double DIRT_TRANSPARENCY_PICKED = 1.0;
+const double COIN_TRANSPARENCY_DEFAULT = 0.0;
+const double COIN_TRANSPARENCY_PICKED = 1.0;
 const double ROBOT_DEFAULT_POSITION[] = { 0.0, 0.0, 0.0 };
 const double ROBOT_DEFAULT_ROTATION[] = { 0.0, 1.0, 0.0, 0.0 };
-const double INDICATOR_EXPLORING[] = { 0.0, 1.0, 0.0 };
-const double INDICATOR_EXPLOITING[] = { 1.0, 0.0, 0.0 };
+const double INDICATOR_EXPLORING_COLOR[] = { 0.0, 1.0, 0.0 };
+const double INDICATOR_EXPLOITING_COLOR[] = { 1.0, 0.0, 0.0 };
 #pragma endregion
 
 #pragma region Q-Learning Constants
@@ -100,31 +99,31 @@ const int AMOUNT_OF_MOVES = 8;
 const double BOARD_BASE_SCORE = 0.0;
 const double MINIMUM_BATTERY_LEVEL = 0.0;
 const double BATTERY_START_LEVEL = 100.00;
-const double BATTERY_LOST_PER_MOVE = 1.0;
+const double BATTERY_LOST_PER_MOVE = 0.5;
 const double REWARD_OBSTRUCTION = -100.00;
 const double REWARD_EMPTY = -10.0;
-const double REWARD_DIRT = 100;
+const double REWARD_COIN = 100;
 const double LEARNING_RATE = 0.1;
 const double DISCOUNT_RATE = 0.99;
 const double MINIMUM_EXPLORATION_RATE = 1.0;
 const double MAX_EXPLORATION_RATE = 100.0;
-const double EXPLORATION_DECAY_RATE = -0.1;
+const double EXPLORATION_DECAY_RATE = -0.001;
 #pragma endregion
 
 #pragma region Global Variable Declarations
-Supervisor* robot;
+Supervisor* environment;
 GPS* gps;
 Motor* left_motor;
 Motor* right_motor;
-Node** dirts;
+Node** coins;
 Field* indicator;
 DirectionAngle previous_direction;
 
 double distance_to_travel_linear;
 
-int amount_of_dirt;
+int amount_of_coin;
 int timeStep;
-int amount_of_dirt_picked_up = 0;
+int amount_of_coin_picked_up = 0;
 bool should_rotate;
 bool should_move;
 bool stop_move_first_iteration;
@@ -132,7 +131,7 @@ bool rotation_first_iteration;
 bool first_step = false;
 double map_row_size;
 double map_column_size;
-double** dirt_positions;
+double** coin_positions;
 #pragma endregion
 
 
@@ -145,18 +144,16 @@ int main(int argc, char **argv)
     DirectionAngle turn_to;
     TurnDirection turn_direction;
     TurnDirection opposite_turn_direction = Clockwise;
-    InertialUnit* imu;
-    Node* arena;
 
     const double* robot_gps_axis_to_watch = NULL;
     const int laser_sensor_count = 3;
     double robot_forward_angle;
     double target_distance;
     double laser_sensor_distance;
-    double s1;
-    double s2;
-    double n1;
-    double n2;
+    double gps_x;
+    double gps_z;
+    double temp_robot_new_x;
+    double temp_robot_new_z;
     double x_coordinate_new;
     double z_coordinate_new;
     double x_coordinate_old;
@@ -166,17 +163,20 @@ int main(int argc, char **argv)
     double tile_row_count;
     double tile_column_count;
     double average;
+    float robot_current_facing_angle;
     bool should_stop_moving;
-    bool is_on_dirt = false;
+    bool is_on_coin = false;
     bool is_path_obstructed;
     bool is_movement_positive_ve;
     int axis_to_watch;
 #pragma endregion
 
 
-#pragma region Q-Learning Variable Declarations
+#pragma region Local Q-Learning Variable Declarations
+    InertialUnit* imu;
+    Node* arena;
     Array2D<double> q_table;
-    const int number_of_episodes = 1000;
+    const int number_of_episodes = 100;
     double battery;
     double exploration_rate;
     double explore_probability;
@@ -196,11 +196,11 @@ int main(int argc, char **argv)
     distance_to_travel_linear = SIZE_OF_TILE / NUMBER_OF_SUBDIVISIONS;
 
     /* Robot uses supervisor so we can obtain world info as well */
-    robot = new Supervisor();
-    timeStep = robot->getBasicTimeStep();  
+    environment = new Supervisor();
+    timeStep = environment->getBasicTimeStep();
 
     /* Gets a reference to the floor/arena */
-    arena = robot->getFromDef("Arena");
+    arena = environment->getFromDef("Arena");
     
     /* Get map size in meters */
     arena_row_size = (arena->getField("floorSize")->getSFVec2f())[0];
@@ -225,22 +225,22 @@ int main(int argc, char **argv)
         for (int j = 0; j < q_table.column_count; j++)
             q_table.array[i][j] = BOARD_BASE_SCORE;
 
-    /* Get the amount of dirt */
-    amount_of_dirt = robot->getFromDef("DirtContainer")->getField("children")->getCount();
+    /* Get the amount of coin */
+    amount_of_coin = environment->getFromDef("CoinContainer")->getField("children")->getCount();
 
-    /* Initialize the dirt position array */
-    dirt_positions = new double* [amount_of_dirt];
-    for (int i = 0; i < amount_of_dirt; i++)
+    /* Initialize the coin position array */
+    coin_positions = new double* [amount_of_coin];
+    for (int i = 0; i < amount_of_coin; i++)
     {
-        dirt_positions[i] = new double[2];
+        coin_positions[i] = new double[2];
     }
     
-    /* Get Dirt locations */
+    /* Get coin locations */
 
-    for (int i = 0; i < amount_of_dirt; i++)
+    for (int i = 0; i < amount_of_coin; i++)
     {
-        dirt_positions[i][0] = robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("translation")->getSFVec3f()[0];
-        dirt_positions[i][1] = robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("translation")->getSFVec3f()[2];
+        coin_positions[i][0] = environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("translation")->getSFVec3f()[0];
+        coin_positions[i][1] = environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("translation")->getSFVec3f()[2];
     }
 
 #pragma endregion
@@ -248,8 +248,8 @@ int main(int argc, char **argv)
 
 #pragma region Pre-Loop Things
     /* Get both motors */
-    left_motor = robot->getMotor("left wheel motor");
-    right_motor = robot->getMotor("right wheel motor");
+    left_motor = environment->getMotor("left wheel motor");
+    right_motor = environment->getMotor("right wheel motor");
 
     /* Reseting values on start */
     left_motor->setPosition(INFINITY);
@@ -258,16 +258,16 @@ int main(int argc, char **argv)
     right_motor->setVelocity(MOTOR_STOP_SPEED);
 
     /* Get and enable the GPS and Inertial Unit */
-    imu = robot->getInertialUnit("inertial unit");
-    gps = robot->getGPS("gps");
+    imu = environment->getInertialUnit("inertial unit");
+    gps = environment->getGPS("gps");
     imu->enable(timeStep);
     gps->enable(timeStep);
 
     /* Get and enable sensors */
     DistanceSensor** laser_sensors = new DistanceSensor*[laser_sensor_count];
-    laser_sensors[0] = robot->getDistanceSensor("distance sensor1");
-    laser_sensors[1] = robot->getDistanceSensor("distance sensor2");
-    laser_sensors[2] = robot->getDistanceSensor("distance sensor3");
+    laser_sensors[0] = environment->getDistanceSensor("distance sensor1");
+    laser_sensors[1] = environment->getDistanceSensor("distance sensor2");
+    laser_sensors[2] = environment->getDistanceSensor("distance sensor3");
 
     laser_sensors[0]->enable(timeStep);
     laser_sensors[1]->enable(timeStep);
@@ -285,7 +285,7 @@ int main(int argc, char **argv)
     current_position[1] = start_position_column;
 
     /* Get Indicator reference */
-    indicator = robot->getFromDef("Indicator")->getField("children")->getMFNode(0)->getField("appearance")->getSFNode()->getField("baseColor");
+    indicator = environment->getFromDef("Indicator")->getField("children")->getMFNode(0)->getField("appearance")->getSFNode()->getField("baseColor");
 
     /* Variable initial values */
     x_coordinate_new = 0.0;
@@ -312,15 +312,15 @@ int main(int argc, char **argv)
     std::cout << "Rover Starting: " << current_position[0] << ", " << current_position[1] << std::endl;
 #pragma endregion
 
-    ResetDirts();
+    ResetCoins();
 
-    while ((robot->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
+    while ((environment->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
     {
 
 
 #pragma region If End of Episode
         /* Move to next episode if max steps reached or battery runs out */
-        if ( (battery <= MINIMUM_BATTERY_LEVEL || amount_of_dirt_picked_up == amount_of_dirt) && should_move)
+        if ( (battery <= MINIMUM_BATTERY_LEVEL || amount_of_coin_picked_up == amount_of_coin) && should_move)
         {
             exploration_rate = MINIMUM_EXPLORATION_RATE + (MAX_EXPLORATION_RATE - MINIMUM_EXPLORATION_RATE) * exp(EXPLORATION_DECAY_RATE * current_episode);
 
@@ -382,20 +382,20 @@ int main(int argc, char **argv)
 
                 if (rotation_first_iteration)
                 {
-                    s1 = gps->getValues()[0] * -1;
-                    s2 = gps->getValues()[2] * -1;
+                    gps_x = gps->getValues()[0] * -1;
+                    gps_z = gps->getValues()[2] * -1;
 
-                    n1 = x_coordinate_new;
-                    n2 = z_coordinate_new;
+                    temp_robot_new_x = x_coordinate_new;
+                    temp_robot_new_z = z_coordinate_new;
 
-                    n1 += s1;
-                    n2 += s2;
+                    temp_robot_new_x += gps_x;
+                    temp_robot_new_z += gps_z;
                 }
 
             }
+            robot_current_facing_angle = RadianTo360Degree(((std::atan2(temp_robot_new_z, temp_robot_new_x) - 1.5708) * -1));
 
-            turn_direction = GetTurnDirection(robot_forward_angle, RadianTo360Degree(((std::atan2(n2, n1) - 1.5708) * -1)));
-
+            turn_direction = GetTurnDirection(robot_forward_angle, robot_current_facing_angle);
 
             if (rotation_first_iteration)
             {
@@ -409,7 +409,7 @@ int main(int argc, char **argv)
 #pragma endregion
 
 
-#pragma region Check Move Decision
+#pragma region Obstacle Detection
 
 
         /*                                        Q-Learning Algorithm                                      */
@@ -453,13 +453,13 @@ int main(int argc, char **argv)
 
             if (should_stop_moving)
             {
-                is_on_dirt = CheckForDirt(x_coordinate_new, z_coordinate_new);
+                is_on_coin = CheckForCoin(x_coordinate_new, z_coordinate_new);
 
-                if (is_on_dirt)
+                if (is_on_coin)
                 {
                     //exploration_rate = MAX_EXPLORATION_RATE;
-                    HideDirt(x_coordinate_new, z_coordinate_new);
-                    UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_DIRT);
+                    HideCoin(x_coordinate_new, z_coordinate_new);
+                    UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_COIN);
                 }
                 else
                 {
@@ -485,34 +485,34 @@ int main(int argc, char **argv)
     return 0;
 }
 
-/* Checks if the position has a dirt on it by comparing x and z coordinates */
-bool CheckForDirt(double x_coordinate, double z_coordinate)
+/* Checks if the position has a coin on it by comparing x and z coordinates */
+bool CheckForCoin(double x_coordinate, double z_coordinate)
 {
     static double epsilon = 0.001;
     
-    for (int i = 0; i < amount_of_dirt; i++)
+    for (int i = 0; i < amount_of_coin; i++)
     {
-        //(dirt_positions[i][0]) == x_coordinate && (dirt_positions[i][1]) == z_coordinate
-        if ( (abs(dirt_positions[i][0] - x_coordinate) <= epsilon * abs(dirt_positions[i][0])) && (abs(dirt_positions[i][1] - z_coordinate) <= epsilon * abs(dirt_positions[i][1])))
+        //(coin_positions[i][0]) == x_coordinate && (coin_positions[i][1]) == z_coordinate
+        if ( (abs(coin_positions[i][0] - x_coordinate) <= epsilon * abs(coin_positions[i][0])) && (abs(coin_positions[i][1] - z_coordinate) <= epsilon * abs(coin_positions[i][1])))
             return true;
     }
     return false;
 }
 
-/* Hides the dirt that matches the x and z coordinates provided */
-void HideDirt(double x_coordinate, double z_coordinate)
+/* Hides the coin that matches the x and z coordinates provided */
+void HideCoin(double x_coordinate, double z_coordinate)
 {
     static double epsilon = 0.001;
 
-    double dirt_x;
-    double dirt_z;
-    for (int i = 0; i < amount_of_dirt; i++)
+    double coin_x;
+    double coin_z;
+    for (int i = 0; i < amount_of_coin; i++)
     {
-        if ((abs(dirt_positions[i][0] - x_coordinate) <= epsilon * abs(dirt_positions[i][0])) && (abs(dirt_positions[i][1] - z_coordinate) <= epsilon * abs(dirt_positions[i][1])))
+        if ((abs(coin_positions[i][0] - x_coordinate) <= epsilon * abs(coin_positions[i][0])) && (abs(coin_positions[i][1] - z_coordinate) <= epsilon * abs(coin_positions[i][1])))
         {
-            robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("children")->
-                getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->setSFFloat(DIRT_TRANSPARENCY_PICKED);
-            amount_of_dirt_picked_up++;
+            environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("children")->
+                getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->setSFFloat(COIN_TRANSPARENCY_PICKED);
+            amount_of_coin_picked_up++;
             return;
         }
     }
@@ -522,28 +522,28 @@ void HideDirt(double x_coordinate, double z_coordinate)
 void ResetEnvironment()
 {
     /* Reset Robot */
-    robot->getFromDef("Khepera")->getField("translation")->setSFVec3f(ROBOT_DEFAULT_POSITION);
-    robot->getFromDef("Khepera")->getField("rotation")->setSFRotation(ROBOT_DEFAULT_ROTATION);
+    environment->getFromDef("Khepera")->getField("translation")->setSFVec3f(ROBOT_DEFAULT_POSITION);
+    environment->getFromDef("Khepera")->getField("rotation")->setSFRotation(ROBOT_DEFAULT_ROTATION);
 
 
-    /* Reset Dirt visibility */
-    ResetDirts();
+    /* Reset Coin visibility */
+    ResetCoins();
 
     ResetDecisionVariables();
 
     first_step = true;
     previous_direction = TopCenter;
-    amount_of_dirt_picked_up = 0;
+    amount_of_coin_picked_up = 0;
 }
 
-/* Resets the transparency of all of the dirts */
-void ResetDirts()
+/* Resets the transparency of all of the coins */
+void ResetCoins()
 {
-    for (int i = 0 ; i < amount_of_dirt ; i++)
+    for (int i = 0 ; i < amount_of_coin ; i++)
     {
-        robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("children")->
-            getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->setSFFloat(DIRT_TRANSPARENCY_DEFAULT);
-        //robot->getFromDef("DirtContainer")->getField("children")->getMFNode(i)->getField("children")->
+        environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("children")->
+            getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->setSFFloat(COIN_TRANSPARENCY_DEFAULT);
+        //environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("children")->
         //    getMFNode(0)->getField("appearance")->getSFNode()->getField("baseColor")->setSFColor(DIRT_DEFAULT_COLOR);
     }
 }
@@ -551,6 +551,7 @@ void ResetDirts()
 /* Updates the q-value for the q-table and the current episode reward */
 void UpdateNewPositionScore(Array2D<double>* q_table, DirectionAngle direction, int* current_position, int* new_position, double* current_episode_reward, double reward)
 {
+
     int action = GetDirectionIndex(direction);
     int state = (map_row_size * current_position[0]) + current_position[1];
     int new_state = (map_row_size * new_position[0]) + new_position[1];
@@ -596,9 +597,7 @@ void UpdateNewPositionScore(Array2D<double>* q_table, DirectionAngle direction, 
         break;
     }
 
-    std::cout << "Ran into wall at State-Action (" << state << ", " << action << ") and updated it to " << q_table->array[state][action] << " points" << std::endl;
-
-    //std::cout << "Bellmond boi: " << q_table->array[state][action] << std::endl;
+    std::cout << "State-Action (" << state << ", " << action << ") is updated to " << q_table->array[state][action] << " points." << std::endl;
 }
 
 /* Returns the index position of a direction */
@@ -628,11 +627,15 @@ int GetDirectionIndex(DirectionAngle direction)
 /* Checks if the next move is obstructed */
 bool IsFacingObstacle(DistanceSensor** laser_sensors, int laser_sensor_count)
 {
+    static double epsilon = 0.001;
+    //abs(laser_sensor_distance - (DISTANCE_SENSOR_THRESHOLD * laser_sensor_count)) <= epsilon * abs(laser_sensor_distance) 
+
     double laser_sensor_distance = 0;
     for(int k = 0 ; k < laser_sensor_count; k++)
         laser_sensor_distance += laser_sensors[k]->getValue();
 
-    if (laser_sensor_distance != DISTANCE_SENSOR_THRESHOLD * laser_sensor_count) return true;
+    //if (laser_sensor_distance != DISTANCE_SENSOR_THRESHOLD * laser_sensor_count) return true;
+    if (abs(laser_sensor_distance - (DISTANCE_SENSOR_THRESHOLD * laser_sensor_count)) > epsilon * abs(laser_sensor_distance)) return true;
 
     return false;
 }
@@ -720,20 +723,18 @@ void UpdatePosition(DirectionAngle direction, int* position)
 /* Decides the next move based on exploration-exploitation */
 DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int* current_position, int* new_position)
 {
-    static int epsilon = 0.001;
     DirectionAngle turn_to;
-    int explore_probability = rand() % 100;
+    int explore_probability = rand() % 101;
 
     if (explore_probability <= exploration_rate)
     {
         turn_to = ChooseRandomMove();
-        indicator->setSFColor(INDICATOR_EXPLORING);
+        indicator->setSFColor(INDICATOR_EXPLORING_COLOR);
     }
     else
     {
         turn_to = GetStateBestDirectionAngle(q_table, current_position);
-
-        indicator->setSFColor(INDICATOR_EXPLOITING);
+        indicator->setSFColor(INDICATOR_EXPLOITING_COLOR);
     }
 
     if (first_step)
@@ -944,7 +945,7 @@ DirectionAngle GetStateBestDirectionAngle(Array2D<double>* q_table, int* positio
 /* Cleans up all heap initialized memory */
 void CleanUp()
 {
-    delete robot;
+    delete environment;
     delete left_motor;
     delete right_motor;
 }

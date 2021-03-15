@@ -87,7 +87,7 @@ Wall {
   name "wall(2)"
   size 0.28 0.1 1.08
 }
-DEF DirtContainer Group {
+DEF CoinContainer Group {
   children [
     Transform {
       translation -0.1 0 0.6
@@ -192,6 +192,7 @@ DEF DirtContainer Group {
         Shape {
           appearance PBRAppearance {
             baseColor 1 1 0
+            transparency 1
             metalness 0
           }
           geometry Cylinder {
@@ -289,7 +290,7 @@ DEF Indicator Transform {
   children [
     Shape {
       appearance PBRAppearance {
-        baseColor 0 1 0
+        baseColor 1 0 0
         metalness 0
       }
       geometry Sphere {
