@@ -103,15 +103,16 @@ const int AMOUNT_OF_MOVES = 8;
 const double BOARD_BASE_SCORE = 0.0;
 const double MINIMUM_BATTERY_LEVEL = 0.0;
 const double BATTERY_START_LEVEL = 100.00;
-const double BATTERY_LOST_PER_MOVE = 0.5;
+const double BATTERY_LOST_PER_MOVE = 1.0;
 const double REWARD_OBSTRUCTION = -100.00;
-const double REWARD_EMPTY = -10.0;
+const double REWARD_EMPTY = 0.0;
 const double REWARD_COIN = 100;
 const double LEARNING_RATE = 0.1;
 const double DISCOUNT_RATE = 0.99;
 const double MINIMUM_EXPLORATION_RATE = 1.0;
 const double MAX_EXPLORATION_RATE = 100.0;
-const double EXPLORATION_DECAY_RATE = -0.1;
+const double EXPLORATION_DECAY_RATE = -0.001;
+const double MAX_SCORE = REWARD_COIN;
 #pragma endregion
 
 #pragma region Global Variable Declarations
@@ -138,6 +139,8 @@ double map_column_size;
 double** coin_positions;
 #pragma endregion
 
+
+int found_coin_at_index = 1;
 
 int main(int argc, char **argv)
 {
@@ -316,6 +319,13 @@ int main(int argc, char **argv)
 
     std::cout << "Map Size: " << map_row_size << ", " << map_column_size << std::endl;
     std::cout << "Rover Starting: " << current_position[0] << ", " << current_position[1] << std::endl;
+    
+    amount_of_coin = 2;
+
+    std::cout << "Amount of coins: " << amount_of_coin << std::endl;
+    std::cout << "Amount of episodes: " << number_of_episodes << std::endl;
+    std::cout << "Amount of steps per episodes: " << BATTERY_START_LEVEL/BATTERY_LOST_PER_MOVE << std::endl;
+
 #pragma endregion
 
     ResetCoins();
@@ -326,7 +336,7 @@ int main(int argc, char **argv)
 
 #pragma region If End of Episode
         /* Move to next episode if max steps reached or battery runs out */
-        if ( (battery <= MINIMUM_BATTERY_LEVEL || amount_of_coin_picked_up == amount_of_coin) && should_move)
+        if ( (battery <= MINIMUM_BATTERY_LEVEL && should_move) || amount_of_coin_picked_up == amount_of_coin)
         {
             exploration_rate = MINIMUM_EXPLORATION_RATE + (MAX_EXPLORATION_RATE - MINIMUM_EXPLORATION_RATE) * exp(EXPLORATION_DECAY_RATE * current_episode);
 
@@ -346,6 +356,7 @@ int main(int argc, char **argv)
 
             std::cout << "Average for episode: " << average << std::endl;
             std::cout << "Exploration rate is now at: " << exploration_rate << std::endl;
+            std::cout << "Current episode number: " << current_episode << std::endl;
 
             current_episode_reward = 0.0;
             current_position[0] = start_position_row;
@@ -353,6 +364,8 @@ int main(int argc, char **argv)
 
             x_coordinate_old = 0.0;
             z_coordinate_old = 0.0;
+
+            amount_of_coin_picked_up = 0;
 
             std::cout << "next.."<< std::endl;
             ResetEnvironment(); /* Move to next episode */
@@ -465,7 +478,7 @@ int main(int argc, char **argv)
                 {
                     //exploration_rate = MAX_EXPLORATION_RATE;
                     HideCoin(x_coordinate_new, z_coordinate_new);
-                    UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_COIN);
+                    UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_COIN * found_coin_at_index);
                 }
                 else
                 {
@@ -503,7 +516,10 @@ bool CheckForCoin(double x_coordinate, double z_coordinate)
         //(coin_positions[i][0]) == x_coordinate && (coin_positions[i][1]) == z_coordinate
         if ( (abs(coin_positions[i][0] - x_coordinate) <= epsilon * abs(coin_positions[i][0])) && (abs(coin_positions[i][1] - z_coordinate) <= epsilon * abs(coin_positions[i][1])))
             if (IsCoinPickedUp(x_coordinate, z_coordinate))
+            {
+                found_coin_at_index = i+1;
                 return true;
+            }
     }
     return false;
 }
@@ -594,8 +610,11 @@ void UpdateNewPositionScore(Array2D<double>* q_table, DirectionAngle direction, 
     //q_table->array[state][action] = (1 - LEARNING_RATE) * q_table->array[state][action] 
     //    + LEARNING_RATE * (reward + DISCOUNT_RATE * q_table->array[state][best_action_index]);
 
-    q_table->array[state][action] = q_table->array[state][action] + 
-        (LEARNING_RATE * (reward + (DISCOUNT_RATE * q_table->array[new_state][new_pos_best_action_index]) - q_table->array[state][action]));
+    //q_table->array[state][action] = q_table->array[state][action] + 
+    //    (LEARNING_RATE * (reward + (DISCOUNT_RATE * q_table->array[new_state][new_pos_best_action_index]) - q_table->array[state][action]));
+
+    q_table->array[state][action] = (1 - LEARNING_RATE) * q_table->array[state][action] + 
+    (LEARNING_RATE * (reward + (DISCOUNT_RATE * q_table->array[new_state][new_pos_best_action_index])));
 
     std::string s;
     switch (action)
@@ -755,17 +774,16 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int*
     DirectionAngle turn_to;
     int explore_probability = rand() % 101;
 
-    if (explore_probability <= exploration_rate)
-    {
-        turn_to = ChooseRandomMove();
-        indicator->setSFColor(INDICATOR_EXPLORING_COLOR);
-    }
-    else
-    {
+    //if (explore_probability <= exploration_rate)
+    //{
+    //    turn_to = ChooseRandomMove();
+    //    indicator->setSFColor(INDICATOR_EXPLORING_COLOR);
+    //}
+    //else
+    //{
         turn_to = GetStateBestDirectionAngle(q_table, current_position);
         indicator->setSFColor(INDICATOR_EXPLOITING_COLOR);
-
-    }
+    //}
 
     if (first_step)
         turn_to = TopCenter;

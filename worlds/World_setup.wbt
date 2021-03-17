@@ -8,15 +8,14 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation -0.08604998908760936 -0.9709408954658503 -0.22331407678423437 2.359821248106764
-  position -3.4261065835461206 2.144618476647734 -3.4839460157211004
+  orientation 0.25401483501031535 -0.9126382870474116 -0.3202621123546288 4.350163139124799
+  position 3.725800031583751 3.0658711294329137 -0.9095662678381936
 }
 TexturedBackground {
 }
 TexturedBackgroundLight {
 }
 DEF Arena RectangleArena {
-  floorSize 3 3
   floorTileSize 1 1
 }
 DEF Khepera Khepera1 {
@@ -89,6 +88,23 @@ Wall {
 }
 DEF CoinContainer Group {
   children [
+    Transform {
+      translation 0.4 0 -0.2
+      scale 0.3 0.1 0.3
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 1 1 0
+            transparency 1
+            metalness 0
+          }
+          geometry Cylinder {
+            height 0.1
+            radius 0.05
+          }
+        }
+      ]
+    }
     Transform {
       translation -0.1 0 0.6
       scale 0.3 0.1 0.3
@@ -256,6 +272,7 @@ DEF CoinContainer Group {
         Shape {
           appearance PBRAppearance {
             baseColor 1 1 0
+            transparency 1
             metalness 0
           }
           geometry Cylinder {
@@ -289,7 +306,7 @@ DEF Indicator Transform {
   children [
     Shape {
       appearance PBRAppearance {
-        baseColor 1 0 0
+        baseColor 0 1 0
         metalness 0
       }
       geometry Sphere {
