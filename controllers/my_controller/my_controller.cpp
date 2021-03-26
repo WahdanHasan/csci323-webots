@@ -1,8 +1,9 @@
 // File:          my_controller.cpp
-// Date:
-// Description: Q-learning controller for Khepera1
-// Author: Wahdan Hasan, Rama Al Sbeinaty
-// Modifications: idk what this means lol but we made it
+// Date:          15-03-2021
+// Description:   Q-learning controller for Khepera1
+// Author:        Wahdan Hasan, Rama Al Sbeinaty
+
+int explore_for = 0;
 
 #pragma region include statements
 #include <webots/DistanceSensor.hpp>
@@ -103,15 +104,15 @@ const int AMOUNT_OF_MOVES = 8;
 const double BOARD_BASE_SCORE = 0.0;
 const double MINIMUM_BATTERY_LEVEL = 0.0;
 const double BATTERY_START_LEVEL = 100.00;
-const double BATTERY_LOST_PER_MOVE = 0.5;
+const double BATTERY_LOST_PER_MOVE = 1.0;
 const double REWARD_OBSTRUCTION = -100.00;
-const double REWARD_EMPTY = -10.0;
+const double REWARD_EMPTY = 0.0;
 const double REWARD_COIN = 100;
 const double LEARNING_RATE = 0.1;
 const double DISCOUNT_RATE = 0.99;
 const double MINIMUM_EXPLORATION_RATE = 1.0;
 const double MAX_EXPLORATION_RATE = 100.0;
-const double EXPLORATION_DECAY_RATE = -0.1;
+const double EXPLORATION_DECAY_RATE = -0.002;
 #pragma endregion
 
 #pragma region Global Variable Declarations
@@ -139,10 +140,10 @@ double** coin_positions;
 #pragma endregion
 
 
+int found_coin_at_index = 1;
+
 int main(int argc, char **argv)
 {
-    static double epsilon = 0.001;
-
 
 #pragma region Local Variable Declarations
     DirectionAngle turn_to;
@@ -180,7 +181,7 @@ int main(int argc, char **argv)
     InertialUnit* imu;
     Node* arena;
     Array2D<double> q_table;
-    const int number_of_episodes = 10;
+    const int number_of_episodes = 100;
     double battery;
     double exploration_rate;
     double explore_probability;
@@ -233,6 +234,7 @@ int main(int argc, char **argv)
 
     /* Get the amount of coin */
     amount_of_coin = environment->getFromDef("CoinContainer")->getField("children")->getCount();
+    //amount_of_coin = 2;
 
     /* Initialize the coin position array */
     coin_positions = new double* [amount_of_coin];
@@ -247,6 +249,10 @@ int main(int argc, char **argv)
     {
         coin_positions[i][0] = environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("translation")->getSFVec3f()[0];
         coin_positions[i][1] = environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("translation")->getSFVec3f()[2];
+    }    
+    for (int i = 0; i < amount_of_coin; i++)
+    {
+        std::cout << "Coin " << i << " location: (" << coin_positions[i][0] << ", " << coin_positions[i][1] <<  ") " << std::endl;
     }
 
 #pragma endregion
@@ -284,7 +290,8 @@ int main(int argc, char **argv)
     current_episode = 0;
     exploration_rate = 100.0;
 
-    start_position_row = (int)map_row_size / 2;
+    //start_position_row = (int)map_row_size - 2 ;
+    start_position_row = (int)map_row_size / 2 ;
     start_position_column = (int)map_column_size / 2;
 
     current_position[0] = start_position_row;
@@ -297,6 +304,7 @@ int main(int argc, char **argv)
     x_coordinate_new = 0.0;
     z_coordinate_new = 0.0;
     x_coordinate_old = 0.0;
+    //z_coordinate_old = 0.4;
     z_coordinate_old = 0.0;
 
     //previous_direction = TopCenter;
@@ -316,9 +324,11 @@ int main(int argc, char **argv)
 
     std::cout << "Map Size: " << map_row_size << ", " << map_column_size << std::endl;
     std::cout << "Rover Starting: " << current_position[0] << ", " << current_position[1] << std::endl;
+    std::cout << "Amount of coins: " << amount_of_coin << std::endl;
 #pragma endregion
 
     ResetCoins();
+
 
     while ((environment->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
     {
@@ -344,7 +354,9 @@ int main(int argc, char **argv)
 
             average /= current_episode;
 
-            std::cout << "Average for episode: " << average << std::endl;
+            std::cout << "Episode number: " << current_episode - 1 << std::endl;
+            std::cout << "Reward for episode: " << current_episode_reward << std::endl;
+            std::cout << "Average for all episodes: " << average << std::endl;
             std::cout << "Exploration rate is now at: " << exploration_rate << std::endl;
 
             current_episode_reward = 0.0;
@@ -352,6 +364,7 @@ int main(int argc, char **argv)
             current_position[1] = start_position_column;
 
             x_coordinate_old = 0.0;
+            //z_coordinate_old = 0.4;
             z_coordinate_old = 0.0;
 
             std::cout << "next.."<< std::endl;
@@ -430,6 +443,7 @@ int main(int argc, char **argv)
 
             if (is_path_obstructed)
             {
+                explore_for = 0;
                 UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_OBSTRUCTION);
 
                 ResetDecisionVariables();
@@ -457,19 +471,24 @@ int main(int argc, char **argv)
         {
             should_stop_moving = CheckIfReachedTarget(is_movement_positive_ve, robot_gps_axis_to_watch, target_distance);
 
+
+            
             if (should_stop_moving)
             {
+
                 is_on_coin = CheckForCoin(x_coordinate_new, z_coordinate_new);
 
                 if (is_on_coin)
                 {
-                    //exploration_rate = MAX_EXPLORATION_RATE;
                     HideCoin(x_coordinate_new, z_coordinate_new);
-                    UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_COIN);
+                    //UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_COIN * found_coin_at_index);
+
+                    UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_COIN);          
                 }
                 else
                 {
                     UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_EMPTY);
+                    
                 }
 
                 current_position[0] = new_position[0];
@@ -487,6 +506,8 @@ int main(int argc, char **argv)
 
     }
 
+    ResetCoins();
+
     SaveState(&q_table);
 
     CleanUp();
@@ -497,13 +518,24 @@ int main(int argc, char **argv)
 bool CheckForCoin(double x_coordinate, double z_coordinate)
 {
     static double epsilon = 0.001;
+
     
     for (int i = 0; i < amount_of_coin; i++)
     {
         //(coin_positions[i][0]) == x_coordinate && (coin_positions[i][1]) == z_coordinate
-        if ( (abs(coin_positions[i][0] - x_coordinate) <= epsilon * abs(coin_positions[i][0])) && (abs(coin_positions[i][1] - z_coordinate) <= epsilon * abs(coin_positions[i][1])))
-            if (IsCoinPickedUp(x_coordinate, z_coordinate))
+        if ( (((coin_positions[i][0] - x_coordinate) < epsilon) && ((x_coordinate - coin_positions[i][0]) < epsilon)) && (((coin_positions[i][1] - z_coordinate) < epsilon) && ((z_coordinate - coin_positions[i][1]) < epsilon)))
+        {
+            if(explore_for <= 0) explore_for = 5;
+            if (!IsCoinPickedUp(x_coordinate, z_coordinate))
+            {
+                found_coin_at_index = i + 1;
                 return true;
+            }
+        }
+        else
+        {
+            //std::cout << "Coin not found..: (" << coin_positions[i][0] << ", " << coin_positions[i][1] << ")    (" << x_coordinate << ", " << z_coordinate << ")" << std::endl;
+        }
     }
     return false;
 }
@@ -514,17 +546,20 @@ bool IsCoinPickedUp(double x_coordinate, double z_coordinate)
     static double epsilon = 0.001;
     for (int i = 0; i < amount_of_coin; i++)
     {
-        if ((abs(coin_positions[i][0] - x_coordinate) <= epsilon * abs(coin_positions[i][0])) && (abs(coin_positions[i][1] - z_coordinate) <= epsilon * abs(coin_positions[i][1])))
+        if ((((coin_positions[i][0] - x_coordinate) < epsilon) && ((x_coordinate - coin_positions[i][0]) < epsilon)) && (((coin_positions[i][1] - z_coordinate) < epsilon) && ((z_coordinate - coin_positions[i][1]) < epsilon)))
         {
             double coin_transparency = environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("children")->
                 getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->getSFFloat();
-            if ((coin_transparency - COIN_TRANSPARENCY_PICKED) <= epsilon * abs(coin_transparency))
+
+            if ((COIN_TRANSPARENCY_PICKED - coin_transparency) <= epsilon * abs(COIN_TRANSPARENCY_PICKED))
             {
+                std::cout << "coin is picked up." << i << " (" << x_coordinate << ", " << z_coordinate << ") "<< coin_transparency <<  std::endl;
                 return true;
             }
         }
     }
-    
+    std::cout << "coin is not picked up." << std::endl;
+
     return false;
 }
 
@@ -537,11 +572,12 @@ void HideCoin(double x_coordinate, double z_coordinate)
     double coin_z;
     for (int i = 0; i < amount_of_coin; i++)
     {
-        if ((abs(coin_positions[i][0] - x_coordinate) <= epsilon * abs(coin_positions[i][0])) && (abs(coin_positions[i][1] - z_coordinate) <= epsilon * abs(coin_positions[i][1])))
+        if ( (((coin_positions[i][0] - x_coordinate) < epsilon) && ((x_coordinate - coin_positions[i][0]) < epsilon)) && (((coin_positions[i][1] - z_coordinate) < epsilon) && ((z_coordinate - coin_positions[i][1]) < epsilon)))
         {
             environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("children")->
                 getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->setSFFloat(COIN_TRANSPARENCY_PICKED);
             amount_of_coin_picked_up++;
+
             return;
         }
     }
@@ -580,12 +616,13 @@ void ResetCoins()
 /* Updates the q-value for the q-table and the current episode reward */
 void UpdateNewPositionScore(Array2D<double>* q_table, DirectionAngle direction, int* current_position, int* new_position, double* current_episode_reward, double reward)
 {
+    *current_episode_reward += reward;
+    return;
 
     int action = GetDirectionIndex(direction);
     int state = (map_row_size * current_position[0]) + current_position[1];
     int new_state = (map_row_size * new_position[0]) + new_position[1];
 
-    *current_episode_reward += reward;
 
     DirectionAngle best_direction = GetStateBestDirectionAngle(q_table, new_position);
 
@@ -594,8 +631,14 @@ void UpdateNewPositionScore(Array2D<double>* q_table, DirectionAngle direction, 
     //q_table->array[state][action] = (1 - LEARNING_RATE) * q_table->array[state][action] 
     //    + LEARNING_RATE * (reward + DISCOUNT_RATE * q_table->array[state][best_action_index]);
 
-    q_table->array[state][action] = q_table->array[state][action] + 
-        (LEARNING_RATE * (reward + (DISCOUNT_RATE * q_table->array[new_state][new_pos_best_action_index]) - q_table->array[state][action]));
+    //q_table->array[state][action] = q_table->array[state][action] + 
+    //    (LEARNING_RATE * (reward + (DISCOUNT_RATE * q_table->array[new_state][new_pos_best_action_index]) - q_table->array[state][action]));
+
+       /* q_table->array[state][action] = (1 - LEARNING_RATE) * q_table->array[state][action] + 
+        (LEARNING_RATE * (reward + (DISCOUNT_RATE * q_table->array[new_state][new_pos_best_action_index])));*/
+
+     q_table->array[state][action] = q_table->array[state][action] + 
+         (LEARNING_RATE * (reward + (DISCOUNT_RATE * q_table->array[new_state][new_pos_best_action_index]) - q_table->array[state][action]));
 
     std::string s;
     switch (action)
@@ -755,17 +798,28 @@ DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int*
     DirectionAngle turn_to;
     int explore_probability = rand() % 101;
 
-    if (explore_probability <= exploration_rate)
+    if (explore_for == 5)
     {
         turn_to = ChooseRandomMove();
         indicator->setSFColor(INDICATOR_EXPLORING_COLOR);
     }
+
+    if (/*explore_probability <= exploration_rate || */explore_for > 0 )
+    {
+        explore_for--;
+        //turn_to = ChooseRandomMove();
+        //indicator->setSFColor(INDICATOR_EXPLORING_COLOR);
+    }
     else
     {
-        turn_to = GetStateBestDirectionAngle(q_table, current_position);
-        indicator->setSFColor(INDICATOR_EXPLOITING_COLOR);
+        //if (explore_for == 0)
+        {
+            turn_to = GetStateBestDirectionAngle(q_table, current_position);
+            indicator->setSFColor(INDICATOR_EXPLOITING_COLOR);
+        }
 
     }
+
 
     if (first_step)
         turn_to = TopCenter;
