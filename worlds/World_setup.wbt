@@ -65,12 +65,6 @@ DEF Khepera Khepera1 {
     }
   ]
 }
-Wall {
-  translation 0 -1 0
-  rotation 0 1 0 -1.5707953071795862
-  name "wall(3)"
-  size 0.2 0.1 0.3
-}
 DEF CoinContainer Group {
   children [
     Transform {
@@ -130,7 +124,7 @@ DEF Indicator Transform {
   children [
     Shape {
       appearance PBRAppearance {
-        baseColor 0 1 0
+        baseColor 1 1 0
         metalness 0
       }
       geometry Sphere {
