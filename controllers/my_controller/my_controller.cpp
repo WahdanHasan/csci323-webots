@@ -1,15 +1,8 @@
 // File:          my_controller.cpp
-// Date:          15-03-2021
-// Description:   Q-learning controller for Khepera1
-// Author:        Wahdan Hasan, Rama Al Sbeinaty
-
-
-
-const bool is_testing_mode = true;
-
-
-
-
+// Date:
+// Description: Q-learning controller for Khepera1
+// Author: Wahdan Hasan, Rama Al Sbeinaty
+// Modifications: idk what this means lol but we made it
 
 #pragma region include statements
 #include <webots/DistanceSensor.hpp>
@@ -19,6 +12,8 @@ const bool is_testing_mode = true;
 #include <webots/GPS.hpp>
 #include <iostream>
 #include <time.h>
+#include <thread>
+#include <chrono>
 #include <fstream>
 #pragma endregion
 
@@ -68,6 +63,7 @@ float RadianTo360Degree(double);
 bool CheckIfMovementIsPositiveVE(DirectionAngle);
 void UpdatePosition(DirectionAngle, int*);
 void Move();
+void SetUp();
 void CleanUp();
 void StopMove();
 bool IsFacingObstacle(DistanceSensor**, int laser_sensor_count);
@@ -90,7 +86,6 @@ bool IsCoinPickedUp(double, double);
 #pragma region Global Constants
 const int NUMBER_OF_TILES_PER_METER = 2;
 const int NUMBER_OF_SUBDIVISIONS = 5;
-const int DEFAULT_EXPLORE_FOR = 4;
 const double SIZE_OF_TILE = 0.5;
 const double MOTOR_DEFAULT_SPEED = 10.0;
 const double MOTOR_STOP_SPEED = 0.0;
@@ -101,7 +96,6 @@ const double ROBOT_DEFAULT_POSITION[] = { 0.0, 0.0, 0.0 };
 const double ROBOT_DEFAULT_ROTATION[] = { 0.0, 1.0, 0.0, 0.0 };
 const double INDICATOR_EXPLORING_COLOR[] = { 0.0, 1.0, 0.0 };
 const double INDICATOR_EXPLOITING_COLOR[] = { 1.0, 0.0, 0.0 };
-const double INDICATOR_TESTING_COLOR[] = { 1.0, 1.0, 0.0 };
 #pragma endregion
 
 #pragma region Q-Learning Constants
@@ -117,7 +111,8 @@ const double LEARNING_RATE = 0.1;
 const double DISCOUNT_RATE = 0.99;
 const double MINIMUM_EXPLORATION_RATE = 1.0;
 const double MAX_EXPLORATION_RATE = 100.0;
-const double EXPLORATION_DECAY_RATE = -0.002;
+const double EXPLORATION_DECAY_RATE = -0.001;
+const double MAX_SCORE = REWARD_COIN;
 #pragma endregion
 
 #pragma region Global Variable Declarations
@@ -133,7 +128,6 @@ double distance_to_travel_linear;
 
 int amount_of_coin;
 int timeStep;
-int explore_for = 0;
 int amount_of_coin_picked_up = 0;
 bool should_rotate;
 bool should_move;
@@ -146,8 +140,12 @@ double** coin_positions;
 #pragma endregion
 
 
+int found_coin_at_index = 1;
+
 int main(int argc, char **argv)
 {
+    static double epsilon = 0.001;
+
 
 #pragma region Local Variable Declarations
     DirectionAngle turn_to;
@@ -231,15 +229,6 @@ int main(int argc, char **argv)
         q_table.array[i] = new double[q_table.column_count];
     if (!LoadState(&q_table))
     {
-        if (is_testing_mode)
-        {
-            std::cout << "Unable to test without a q-table.." << std::endl;
-            std::cout << "Place q-table in directory or switch to training mode (Line 8 of cpp file).. " << std::endl;
-            return 0;
-        }
-
-        std::cout << "No previous q_table found.. " << std::endl << "Creating new q_table.." << std::endl;
-
         for (int i = 0; i < q_table.row_count; i++)
             for (int j = 0; j < q_table.column_count; j++)
                 q_table.array[i][j] = BOARD_BASE_SCORE;
@@ -261,12 +250,7 @@ int main(int argc, char **argv)
     {
         coin_positions[i][0] = environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("translation")->getSFVec3f()[0];
         coin_positions[i][1] = environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("translation")->getSFVec3f()[2];
-    }    
-    for (int i = 0; i < amount_of_coin; i++)
-    {
-        std::cout << "Coin " << i << " location: (" << coin_positions[i][0] << ", " << coin_positions[i][1] <<  ") " << std::endl;
     }
-
 
 #pragma endregion
 
@@ -303,7 +287,7 @@ int main(int argc, char **argv)
     current_episode = 0;
     exploration_rate = 100.0;
 
-    start_position_row = (int)map_row_size / 2 ;
+    start_position_row = (int)map_row_size / 2;
     start_position_column = (int)map_column_size / 2;
 
     current_position[0] = start_position_row;
@@ -312,17 +296,14 @@ int main(int argc, char **argv)
     /* Get Indicator reference */
     indicator = environment->getFromDef("Indicator")->getField("children")->getMFNode(0)->getField("appearance")->getSFNode()->getField("baseColor");
 
-
-    if (is_testing_mode)
-    {
-        indicator->setSFColor(INDICATOR_TESTING_COLOR);
-    }
-
     /* Variable initial values */
     x_coordinate_new = 0.0;
     z_coordinate_new = 0.0;
     x_coordinate_old = 0.0;
     z_coordinate_old = 0.0;
+
+    //previous_direction = TopCenter;
+    //turn_to = previous_direction;
 
     should_rotate = true;
     rotation_first_iteration = true;
@@ -338,11 +319,16 @@ int main(int argc, char **argv)
 
     std::cout << "Map Size: " << map_row_size << ", " << map_column_size << std::endl;
     std::cout << "Rover Starting: " << current_position[0] << ", " << current_position[1] << std::endl;
+    
+    amount_of_coin = 2;
+
     std::cout << "Amount of coins: " << amount_of_coin << std::endl;
+    std::cout << "Amount of episodes: " << number_of_episodes << std::endl;
+    std::cout << "Amount of steps per episodes: " << BATTERY_START_LEVEL/BATTERY_LOST_PER_MOVE << std::endl;
+
 #pragma endregion
 
     ResetCoins();
-
 
     while ((environment->step(timeStep) != -1) && (current_episode < number_of_episodes)) //step(timestep) is a simulation step and doesnt correspond to seconds in real-time.
     {
@@ -350,16 +336,15 @@ int main(int argc, char **argv)
 
 #pragma region If End of Episode
         /* Move to next episode if max steps reached or battery runs out */
-        if ( (battery <= MINIMUM_BATTERY_LEVEL || amount_of_coin_picked_up == amount_of_coin) && should_move)
+        if ( (battery <= MINIMUM_BATTERY_LEVEL && should_move) || amount_of_coin_picked_up == amount_of_coin)
         {
             exploration_rate = MINIMUM_EXPLORATION_RATE + (MAX_EXPLORATION_RATE - MINIMUM_EXPLORATION_RATE) * exp(EXPLORATION_DECAY_RATE * current_episode);
 
-            current_episode_reward += ((battery /10) * current_episode_reward);
+            battery = BATTERY_START_LEVEL;
 
             rewards_all_episodes[current_episode] = current_episode_reward;
             current_episode++;
 
-            battery = BATTERY_START_LEVEL;
             average = 0.0;
 
             for (int i = 0; i < current_episode; i++)
@@ -369,10 +354,9 @@ int main(int argc, char **argv)
 
             average /= current_episode;
 
-            std::cout << "Episode number: " << current_episode - 1 << std::endl;
-            std::cout << "Reward for episode: " << current_episode_reward << std::endl;
-            std::cout << "Average for all episodes: " << average << std::endl;
+            std::cout << "Average for episode: " << average << std::endl;
             std::cout << "Exploration rate is now at: " << exploration_rate << std::endl;
+            std::cout << "Current episode number: " << current_episode << std::endl;
 
             current_episode_reward = 0.0;
             current_position[0] = start_position_row;
@@ -380,6 +364,8 @@ int main(int argc, char **argv)
 
             x_coordinate_old = 0.0;
             z_coordinate_old = 0.0;
+
+            amount_of_coin_picked_up = 0;
 
             std::cout << "next.."<< std::endl;
             ResetEnvironment(); /* Move to next episode */
@@ -418,7 +404,6 @@ int main(int argc, char **argv)
                     gps_x = gps->getValues()[0] * -1;
                     gps_z = gps->getValues()[2] * -1;
 
-                    if (first_step) { gps_x = 0.0; gps_z = 0.0; }
                     temp_robot_new_x = x_coordinate_new;
                     temp_robot_new_z = z_coordinate_new;
 
@@ -464,6 +449,8 @@ int main(int argc, char **argv)
                 continue;
             }
 
+
+
         }
 #pragma endregion
 
@@ -473,7 +460,6 @@ int main(int argc, char **argv)
 
         if (should_move)
         {
-            explore_for--;
             first_step = false;
             Move();
             is_movement_positive_ve = CheckIfMovementIsPositiveVE(turn_to);
@@ -484,24 +470,19 @@ int main(int argc, char **argv)
         {
             should_stop_moving = CheckIfReachedTarget(is_movement_positive_ve, robot_gps_axis_to_watch, target_distance);
 
-
-            
             if (should_stop_moving)
             {
-
                 is_on_coin = CheckForCoin(x_coordinate_new, z_coordinate_new);
 
                 if (is_on_coin)
                 {
+                    //exploration_rate = MAX_EXPLORATION_RATE;
                     HideCoin(x_coordinate_new, z_coordinate_new);
-                    //UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_COIN * found_coin_at_index);
-
-                    UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_COIN);          
+                    UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_COIN * found_coin_at_index);
                 }
                 else
                 {
                     UpdateNewPositionScore(&q_table, turn_to, current_position, new_position, &current_episode_reward, REWARD_EMPTY);
-                    
                 }
 
                 current_position[0] = new_position[0];
@@ -519,19 +500,9 @@ int main(int argc, char **argv)
 
     }
 
-    ResetCoins();
-
     SaveState(&q_table);
 
     CleanUp();
-
-    for (int i = 0; i < q_table.row_count; i++)
-    {
-        delete[] q_table.array[i];
-    }
-
-    delete[] q_table.array;
-
     return 0;
 }
 
@@ -539,20 +510,16 @@ int main(int argc, char **argv)
 bool CheckForCoin(double x_coordinate, double z_coordinate)
 {
     static double epsilon = 0.001;
-
     
     for (int i = 0; i < amount_of_coin; i++)
     {
-        if ( (((coin_positions[i][0] - x_coordinate) < epsilon) && ((x_coordinate - coin_positions[i][0]) < epsilon)) && (((coin_positions[i][1] - z_coordinate) < epsilon) && ((z_coordinate - coin_positions[i][1]) < epsilon)))
-        {
-            
-            explore_for = DEFAULT_EXPLORE_FOR;
-            
-            if (!IsCoinPickedUp(x_coordinate, z_coordinate))
+        //(coin_positions[i][0]) == x_coordinate && (coin_positions[i][1]) == z_coordinate
+        if ( (abs(coin_positions[i][0] - x_coordinate) <= epsilon * abs(coin_positions[i][0])) && (abs(coin_positions[i][1] - z_coordinate) <= epsilon * abs(coin_positions[i][1])))
+            if (IsCoinPickedUp(x_coordinate, z_coordinate))
             {
+                found_coin_at_index = i+1;
                 return true;
             }
-        }
     }
     return false;
 }
@@ -563,20 +530,17 @@ bool IsCoinPickedUp(double x_coordinate, double z_coordinate)
     static double epsilon = 0.001;
     for (int i = 0; i < amount_of_coin; i++)
     {
-        if ((((coin_positions[i][0] - x_coordinate) < epsilon) && ((x_coordinate - coin_positions[i][0]) < epsilon)) && (((coin_positions[i][1] - z_coordinate) < epsilon) && ((z_coordinate - coin_positions[i][1]) < epsilon)))
+        if ((abs(coin_positions[i][0] - x_coordinate) <= epsilon * abs(coin_positions[i][0])) && (abs(coin_positions[i][1] - z_coordinate) <= epsilon * abs(coin_positions[i][1])))
         {
             double coin_transparency = environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("children")->
                 getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->getSFFloat();
-
-            if ((COIN_TRANSPARENCY_PICKED - coin_transparency) <= epsilon * abs(COIN_TRANSPARENCY_PICKED))
+            if ((coin_transparency - COIN_TRANSPARENCY_PICKED) <= epsilon * abs(coin_transparency))
             {
-                std::cout << "coin is already picked up." <<  std::endl;
                 return true;
             }
         }
     }
-    std::cout << "coin is not picked up.. Picking coin up." << std::endl;
-
+    
     return false;
 }
 
@@ -589,12 +553,11 @@ void HideCoin(double x_coordinate, double z_coordinate)
     double coin_z;
     for (int i = 0; i < amount_of_coin; i++)
     {
-        if ( (((coin_positions[i][0] - x_coordinate) < epsilon) && ((x_coordinate - coin_positions[i][0]) < epsilon)) && (((coin_positions[i][1] - z_coordinate) < epsilon) && ((z_coordinate - coin_positions[i][1]) < epsilon)))
+        if ((abs(coin_positions[i][0] - x_coordinate) <= epsilon * abs(coin_positions[i][0])) && (abs(coin_positions[i][1] - z_coordinate) <= epsilon * abs(coin_positions[i][1])))
         {
             environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("children")->
                 getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->setSFFloat(COIN_TRANSPARENCY_PICKED);
             amount_of_coin_picked_up++;
-
             return;
         }
     }
@@ -607,6 +570,7 @@ void ResetEnvironment()
     environment->getFromDef("Khepera")->getField("translation")->setSFVec3f(ROBOT_DEFAULT_POSITION);
     environment->getFromDef("Khepera")->getField("rotation")->setSFRotation(ROBOT_DEFAULT_ROTATION);
 
+
     /* Reset Coin visibility */
     ResetCoins();
 
@@ -615,8 +579,6 @@ void ResetEnvironment()
     first_step = true;
     previous_direction = TopCenter;
     amount_of_coin_picked_up = 0;
-    explore_for = 0;
-
 }
 
 /* Resets the transparency of all of the coins */
@@ -626,34 +588,33 @@ void ResetCoins()
     {
         environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("children")->
             getMFNode(0)->getField("appearance")->getSFNode()->getField("transparency")->setSFFloat(COIN_TRANSPARENCY_DEFAULT);
+        //environment->getFromDef("CoinContainer")->getField("children")->getMFNode(i)->getField("children")->
+        //    getMFNode(0)->getField("appearance")->getSFNode()->getField("baseColor")->setSFColor(DIRT_DEFAULT_COLOR);
     }
 }
 
 /* Updates the q-value for the q-table and the current episode reward */
 void UpdateNewPositionScore(Array2D<double>* q_table, DirectionAngle direction, int* current_position, int* new_position, double* current_episode_reward, double reward)
 {
-    if (is_testing_mode && reward >= -0.001)
-    {
-        *current_episode_reward += reward;
-    }
-    else if (!is_testing_mode)
-    {
-        *current_episode_reward += reward;
-    }
-
-    if (is_testing_mode) return;
 
     int action = GetDirectionIndex(direction);
     int state = (map_row_size * current_position[0]) + current_position[1];
     int new_state = (map_row_size * new_position[0]) + new_position[1];
 
+    *current_episode_reward += reward;
 
     DirectionAngle best_direction = GetStateBestDirectionAngle(q_table, new_position);
 
     int new_pos_best_action_index = GetDirectionIndex(best_direction);
 
-     q_table->array[state][action] = q_table->array[state][action] + 
-         (LEARNING_RATE * (reward + (DISCOUNT_RATE * q_table->array[new_state][new_pos_best_action_index]) - q_table->array[state][action]));
+    //q_table->array[state][action] = (1 - LEARNING_RATE) * q_table->array[state][action] 
+    //    + LEARNING_RATE * (reward + DISCOUNT_RATE * q_table->array[state][best_action_index]);
+
+    //q_table->array[state][action] = q_table->array[state][action] + 
+    //    (LEARNING_RATE * (reward + (DISCOUNT_RATE * q_table->array[new_state][new_pos_best_action_index]) - q_table->array[state][action]));
+
+    q_table->array[state][action] = (1 - LEARNING_RATE) * q_table->array[state][action] + 
+    (LEARNING_RATE * (reward + (DISCOUNT_RATE * q_table->array[new_state][new_pos_best_action_index])));
 
     std::string s;
     switch (action)
@@ -715,11 +676,13 @@ int GetDirectionIndex(DirectionAngle direction)
 bool IsFacingObstacle(DistanceSensor** laser_sensors, int laser_sensor_count)
 {
     static double epsilon = 0.001;
+    //abs(laser_sensor_distance - (DISTANCE_SENSOR_THRESHOLD * laser_sensor_count)) <= epsilon * abs(laser_sensor_distance) 
 
     double laser_sensor_distance = 0;
     for(int k = 0 ; k < laser_sensor_count; k++)
         laser_sensor_distance += laser_sensors[k]->getValue();
 
+    //if (laser_sensor_distance != DISTANCE_SENSOR_THRESHOLD * laser_sensor_count) return true;
     if (abs(laser_sensor_distance - (DISTANCE_SENSOR_THRESHOLD * laser_sensor_count)) > epsilon * abs(laser_sensor_distance)) return true;
 
     return false;
@@ -809,34 +772,18 @@ void UpdatePosition(DirectionAngle direction, int* position)
 DirectionAngle DecideMove(double exploration_rate, Array2D<double>*q_table, int* current_position, int* new_position)
 {
     DirectionAngle turn_to;
+    int explore_probability = rand() % 101;
 
-
-    if (is_testing_mode)
-    {
-        if (explore_for == DEFAULT_EXPLORE_FOR)
-        {
-            turn_to = ChooseRandomMove();
-        }
-        else if (explore_for <= 0)
-        {
-            turn_to = GetStateBestDirectionAngle(q_table, current_position);
-        }
-    }
-    else
-    {
-        int explore_probability = rand() % 101;
-
-        if (explore_probability <= exploration_rate)
-        {
-            turn_to = ChooseRandomMove();
-            indicator->setSFColor(INDICATOR_EXPLORING_COLOR);
-        }
-        else
-        {
-            turn_to = GetStateBestDirectionAngle(q_table, current_position);
-            indicator->setSFColor(INDICATOR_EXPLOITING_COLOR);
-        }
-    }
+    //if (explore_probability <= exploration_rate)
+    //{
+    //    turn_to = ChooseRandomMove();
+    //    indicator->setSFColor(INDICATOR_EXPLORING_COLOR);
+    //}
+    //else
+    //{
+        turn_to = GetStateBestDirectionAngle(q_table, current_position);
+        indicator->setSFColor(INDICATOR_EXPLOITING_COLOR);
+    //}
 
     if (first_step)
         turn_to = TopCenter;
@@ -861,6 +808,12 @@ float RadianTo360Degree(double radian)
 /* Rotates the robot to face the direction provided */
 void RotateRobot(InertialUnit* imu, DirectionAngle robot_forward_angle_delta, TurnDirection turn_direction, TurnDirection opposite_turn_direciton)
 {
+    ///* Returns if the current facing direction is the direction to rotate towards */
+    if (previous_direction == robot_forward_angle_delta)
+    {
+        should_rotate = false;
+        return;
+    }
 
     /* If the direction to move towards flips sides, it means that the robot has reached the threshold of
        or surpassed how much it should turn. This stops the rotation */
@@ -870,8 +823,10 @@ void RotateRobot(InertialUnit* imu, DirectionAngle robot_forward_angle_delta, Tu
         right_motor->setVelocity(0.0f);
         previous_direction = robot_forward_angle_delta;
         should_rotate = false;
+        //std::cout << "Done Rotating.." << std::endl;
         return;
     }
+
 
     /* Begins rotating either clockwise or anti-clockwise */
     left_motor->setVelocity(turn_direction * MOTOR_DEFAULT_SPEED);
@@ -964,6 +919,15 @@ const double* GetGpsCoordinateToWatch(DirectionAngle facing_direction)
 DirectionAngle ChooseRandomMove()
 {
     int move_index = rand() % AMOUNT_OF_MOVES;
+    
+    //if (move_index == 0)
+    //    move_index = 1;
+    //else if (move_index == 1)
+    //    move_index = 3;
+    //else if (move_index == 2)
+    //    move_index = 4;
+    //else if (move_index == 3)
+    //    move_index = 6;
 
     switch (move_index)
     {
@@ -995,6 +959,15 @@ DirectionAngle GetStateBestDirectionAngle(Array2D<double>* q_table, int* positio
     {
         if (q_table->array[state][j] > q_table->array[state][best_index]) best_index = j;
     }
+
+    //if ((q_table->array[state][1] > q_table->array[state][best_index]))
+    //    best_index = 1;
+    //if ((q_table->array[state][3] > q_table->array[state][best_index]))
+    //    best_index = 3;
+    //if ((q_table->array[state][4] > q_table->array[state][best_index]))
+    //    best_index = 4;
+    //if ((q_table->array[state][6] > q_table->array[state][best_index]))
+    //    best_index = 6;
 
     switch (best_index)
     {
@@ -1048,6 +1021,7 @@ bool LoadState(Array2D<double>* q_table)
 
     if (!in)
     {
+        std::cout << "No previous q_table found.. " << std::endl << "Creating new q_table.." << std::endl;
         return false;
     }
 
@@ -1061,7 +1035,8 @@ bool LoadState(Array2D<double>* q_table)
     {
         std::cout << "The current state-action (" << q_table->row_count << ", " << q_table->column_count <<
             ") does not match the loaded table state-action (" << states << ", " << actions <<
-            ").. The program will create a new q_table and overwrite the old one upon exit.." << std::endl;
+            ").. The program will create a new q_table and overwrite the old one upon successful exit.." << std::endl;
+        std::cout << "Kindly stop the execution of the program before a successful run has completed to prevent data overwritting.. " << std::endl;
         return false;
     }
 
