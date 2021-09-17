@@ -1,2 +1,2 @@
-# CSCI323_Projec
+# CSCI323_Project
  CSCI323 WeBots AI
